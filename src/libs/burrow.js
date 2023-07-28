@@ -4,6 +4,7 @@ const { parseAsset } = require("./asset");
 const { parsePriceData } = require("./priceData");
 const {
   parseAccount,
+  parseAccountDetailed,
   processAccount,
   computeLiquidation,
 } = require("./account");
@@ -88,13 +89,27 @@ module.exports = {
       return b.discount.cmp(a.discount);
     });
 
+    // read liquidator account from burrowland
+    const burrowAccount = processAccount(
+      parseAccountDetailed(
+        keysToCamel(
+          await burrowContract.get_account({
+            account_id: NearConfig.accountId,
+          })
+        )
+      ),
+      assets,
+      prices
+    );
+
     let bestLiquidation = null;
     if (liquidate) {
       for (let i = 0; i < accountsWithDebt.length; ++i) {
         const liquidation = computeLiquidation(
           accountsWithDebt[i],
           NearConfig.maxLiquidationAmount,
-          NearConfig.maxWithdrawCount
+          NearConfig.maxWithdrawCount,
+          burrowAccount
         );
         const { totalPricedProfit, origDiscount, origHealth, health } =
           liquidation;

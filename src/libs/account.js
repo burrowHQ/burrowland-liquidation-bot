@@ -113,7 +113,8 @@ const processAccount = (account, assets, prices) => {
 const computeLiquidation = (
   account,
   maxLiquidationAmount = Big(10).pow(18),
-  maxWithdrawCount = 0
+  maxWithdrawCount = 0,
+  liquidator
 ) => {
   // When liquidating, it's beneficial to take collateral with higher volatilityRatio first, because
   // it will decrease the adjustedCollateralSum less. Similarly it's more beneficial to
@@ -147,6 +148,7 @@ const computeLiquidation = (
     borrowedIndex < account.borrowed.length &&
     account.healthFactor.lt(maxHealthFactor) &&
     totalPricedAmount.lt(maxLiquidationAmount)
+    && liquidator.healthFactor >= 1
   ) {
     const collateral = account.collateral[collateralIndex];
 
@@ -264,6 +266,10 @@ const computeLiquidation = (
     );
 
     recomputeAccountDiscount(account);
+
+
+    liquidator.adjustedBorrowedSum = liquidator.adjustedBorrowedSum.add(adjustedBorrowedAmount)
+    recomputeAccountDiscount(liquidator); // re-calculate liquidator's discount
   }
   // console.log(
   //   `After liq: ${account.accountId} -> health ${account.healthFactor
