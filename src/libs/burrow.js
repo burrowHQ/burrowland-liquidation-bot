@@ -13,7 +13,7 @@ const { Near } = require("near-api-js");
 Big.DP = 27;
 
 module.exports = {
-  main: async (nearObjects, { liquidate = false, forceClose = false } = {}) => {
+  main: async (nearObjects, { liquidate = false, forceClose = false, export2db = false } = {}) => {
     const { burrowContract, priceOracleContract, NearConfig } = nearObjects;
 
     const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
@@ -89,6 +89,35 @@ module.exports = {
       return b.discount.cmp(a.discount);
     });
 
+    if( export2db ){
+        const liquidation_list = [];
+        for(let i = 0; i < accountsWithDebt.length;i++){
+           const liquidate_account = {}
+           liquidate_account["account_id"] = accountsWithDebt[i].accountId;
+           liquidate_account["healthFactor"] = accountsWithDebt[i].healthFactor;
+           liquidate_account["discount"] = accountsWithDebt[i].discount;
+           liquidate_account["collateralSum"] = accountsWithDebt[i].collateralSum.toFixed()
+           liquidate_account["adjustedCollateralSum"] = accountsWithDebt[i].adjustedCollateralSum.toFixed()
+           liquidate_account["borrowedSum"] = accountsWithDebt[i].borrowedSum.toFixed()
+           liquidate_account["adjustedBorrowedSum"] = accountsWithDebt[i].adjustedBorrowedSum.toFixed()
+           liquidate_account["collateral"] = accountsWithDebt[i]["collateral"].map((a) => ({
+                                              tokenId:a.tokenId,
+                                              shares:a.shares.toFixed(),
+                                              balance:a.balance.toFixed(),
+                                          }));
+           liquidate_account["borrowed"] = accountsWithDebt[i]["borrowed"].map((a) => ({
+                                            tokenId:a.tokenId,
+                                            shares:a.shares.toFixed(),
+                                            balance:a.balance.toFixed(),
+                                        }));
+
+           liquidation_list.push(liquidate_account);
+        }
+        const json_str = JSON.stringify(liquidation_list)
+        //console.log(json_str);
+        // post the data to REST api
+
+    }
     // read liquidator account from burrowland
     const burrowAccount = processAccount(
       parseAccountDetailed(
