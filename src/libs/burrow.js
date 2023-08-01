@@ -10,6 +10,10 @@ const {
 } = require("./account");
 const { Near } = require("near-api-js");
 
+const fs = require("fs");
+
+const FILENAME = "liquidated_list.json";
+
 Big.DP = 27;
 
 module.exports = {
@@ -117,6 +121,14 @@ module.exports = {
         //console.log(json_str);
         // post the data to REST api
 
+
+        fs.writeFile(FILENAME, json_str, function (err) {
+          if (err) {
+            console.log(err);
+          } else {
+            console.log(`File ${FILENAME} saved`);
+          }
+        });
     }
     // read liquidator account from burrowland
     const burrowAccount = processAccount(
