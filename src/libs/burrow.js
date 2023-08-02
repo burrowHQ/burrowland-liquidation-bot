@@ -11,6 +11,7 @@ const {
 const { Near } = require("near-api-js");
 
 const fs = require("fs");
+const { exec } = require('node:child_process')
 
 const FILENAME = "liquidated_list.json";
 
@@ -122,10 +123,21 @@ module.exports = {
         // post the data to REST api
 
 
-        fs.writeFile(FILENAME, json_str, function (err) {
+        fs.writeFile("tmp.json", json_str, function (err) {
           if (err) {
             console.log(err);
           } else {
+            // run the `cp` command using exec
+            exec('cp ./tmp.json ./liquidated_list.json', (err, output) => {
+              // once the command has completed, the callback function is called
+              if (err) {
+                  // log and return if we encounter an error
+                  console.error("could not execute command: ", err)
+                  return
+              }
+              // log the output received from the command
+              console.log("Output: \n", output)
+            })
             console.log(`File ${FILENAME} saved`);
           }
         });

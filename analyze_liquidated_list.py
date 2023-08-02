@@ -22,7 +22,7 @@ def analyze_accounts(filename: str, N: int):
          ForceClose_list.append(account)
    
    # sort
-   ForceClose_list = sorted(ForceClose_list, key=lambda d: d['borrowedSum']) 
+   ForceClose_list = sorted(ForceClose_list, key=lambda d: d['borrowedSum'], reverse = True) 
    
    # take the first N if N > 0
    if N > 0 and len(ForceClose_list) > N:
