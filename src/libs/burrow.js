@@ -123,12 +123,12 @@ module.exports = {
         // post the data to REST api
 
 
-        fs.writeFile("tmp.json", json_str, function (err) {
+        fs.writeFile("./data/tmp.json", json_str, function (err) {
           if (err) {
             console.log(err);
           } else {
             // run the `cp` command using exec
-            exec('cp ./tmp.json ./liquidated_list.json', (err, output) => {
+            exec('cp ./data/tmp.json ./data/liquidated_list.json', (err, output) => {
               // once the command has completed, the callback function is called
               if (err) {
                   // log and return if we encounter an error

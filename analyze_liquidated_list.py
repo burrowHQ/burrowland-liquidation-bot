@@ -2,7 +2,7 @@ import os
 import sys
 import json
 
-FILENAME = "liquidated_list.json"
+FILENAME = "./data/liquidated_list.json"
 
 def OpenFile(filepath):
    with open(filepath, mode='r', encoding="utf-8") as f:
@@ -29,7 +29,7 @@ def analyze_accounts(filename: str, N: int):
       ForceClose_list = ForceClose_list[:N]
       
    
-   save2file("ForceClose_list.json", ForceClose_list)
+   save2file("./data/ForceClose_list.json", ForceClose_list)
    
    
 if __name__=="__main__":
