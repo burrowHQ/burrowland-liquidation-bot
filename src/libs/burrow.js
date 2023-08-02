@@ -11,7 +11,7 @@ const {
 const { Near } = require("near-api-js");
 
 const fs = require("fs");
-const { exec } = require('node:child_process')
+const { exec } = require('child_process')
 
 const FILENAME = "liquidated_list.json";
 
