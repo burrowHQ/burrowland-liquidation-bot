@@ -12,6 +12,7 @@ const { Near } = require("near-api-js");
 
 const fs = require("fs");
 const { exec } = require('child_process')
+const request = require("request")
 
 const FILENAME = "liquidated_list.json";
 
@@ -120,7 +121,23 @@ module.exports = {
         }
         const json_str = JSON.stringify(liquidation_list)
         //console.log(json_str);
+        
         // post the data to REST api
+        request({
+            url: "https://mainnet-indexer.ref-finance.com/add-burrow-liquidation-result",
+            method: "POST",
+            headers: { "content-type": "application/json", },
+            json: liquidation_list
+        }, function (error, response, body) {
+            if (!error && response.statusCode === 200) {
+                // console.log(body)
+            }
+            else {
+                console.log("error: " + error)
+                console.log("response.statusCode: " + response.statusCode)
+                console.log("response.statusText: " + response.statusText)
+            }
+        })
 
 
         fs.writeFile("./data/tmp.json", json_str, function (err) {

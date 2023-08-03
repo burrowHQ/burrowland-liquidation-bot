@@ -11,7 +11,8 @@
     "lodash": "^4.17.21",
     "near-api-js": "^0.38.0",
     "node-fetch": "^2.6.1",
-    "big.js": "^6.0.3"
+    "big.js": "^6.0.3",
+    "request": "^2.88.2"
   },
   "devDependencies": {
     "prettier": "^2.2.1"
