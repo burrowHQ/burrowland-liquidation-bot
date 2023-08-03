@@ -20,7 +20,7 @@ async function main(nearObjects) {
           registration_only: true,
         },
         Big(10).pow(12).mul(300).toFixed(0),
-        "1"
+        Big(10).pow(24).toFixed(0)
       )
   }
 
@@ -32,7 +32,7 @@ async function main(nearObjects) {
       registration_only: true,
     },
     Big(10).pow(12).mul(300).toFixed(0),
-    "1"
+    Big(10).pow(23).toFixed(0)
   )
 
   // account in misc tokens
