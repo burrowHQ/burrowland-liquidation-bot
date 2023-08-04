@@ -178,7 +178,10 @@ async function main(nearObjects, rebalance) {
           Big(10).pow(23).toFixed(0)
         );
       }
-      await refBuy(nearObjects, b.tokenId, b.tokenBalance);
+      // Don't attempt buy wNEAR
+      if (!(b.tokenId === NearConfig.wrapNearAccountId)) {
+        await refBuy(nearObjects, b.tokenId, b.tokenBalance);
+      } 
 
       const balance = bigMin(
         Big(await token.ft_balance_of({ account_id: NearConfig.accountId })),
