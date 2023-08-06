@@ -369,7 +369,7 @@ async function predictComputeLiquidation(
         priceOracleContractId + ' oracle_call ' + 
         '\'' + JSON.stringify(oracle_call_args) + '\'' +
         ' --accountId ' + caller_id);
-    LogInfo('');
+    LogInfo('\x1B[0m');
     
   };
 
@@ -396,7 +396,7 @@ async function checkCallerBalance(callerAccount, borrowedAssets) {
         LogInfo("Need:    " + borrowedDetail.amount.toFixed(0) + ' --> ' + borrowedDetail.amount.div(amount_decimals).toFixed(metadata.decimals));
         LogInfo("Current: " + callerBalance.toFixed(0));
         LogInfo(callerBalance.cmp(borrowedDetail.amount) >= 0 ? "" : "diff:    \x1B[31m" +  borrowedDetail.amount.sub(callerBalance).toFixed(0)  + ' --> ' + borrowedDetail.amount.sub(callerBalance).div(amount_decimals).toFixed(metadata.decimals));
-        LogInfo("");
+        LogInfo("\x1B[0m");
     }
 }
 
