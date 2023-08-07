@@ -95,23 +95,25 @@ module.exports = {
       return b.discount.cmp(a.discount);
     });
 
+    // select those whose healthFactor less than 2
     if( export2db ){
         const liquidation_list = [];
-        for(let i = 0; i < accountsWithDebt.length;i++){
+        for(let i = 0; i < accounts.length;i++){
+           if(parseFloat(accounts[i].healthFactor) > 2.0) continue;
            const liquidate_account = {}
-           liquidate_account["account_id"] = accountsWithDebt[i].accountId;
-           liquidate_account["healthFactor"] = accountsWithDebt[i].healthFactor;
-           liquidate_account["discount"] = accountsWithDebt[i].discount;
-           liquidate_account["collateralSum"] = accountsWithDebt[i].collateralSum.toFixed()
-           liquidate_account["adjustedCollateralSum"] = accountsWithDebt[i].adjustedCollateralSum.toFixed()
-           liquidate_account["borrowedSum"] = accountsWithDebt[i].borrowedSum.toFixed()
-           liquidate_account["adjustedBorrowedSum"] = accountsWithDebt[i].adjustedBorrowedSum.toFixed()
-           liquidate_account["collateral"] = accountsWithDebt[i]["collateral"].map((a) => ({
+           liquidate_account["account_id"] = accounts[i].accountId;
+           liquidate_account["healthFactor"] = accounts[i].healthFactor;
+           liquidate_account["discount"] = accounts[i].discount;
+           liquidate_account["collateralSum"] = accounts[i].collateralSum.toFixed()
+           liquidate_account["adjustedCollateralSum"] = accounts[i].adjustedCollateralSum.toFixed()
+           liquidate_account["borrowedSum"] = accounts[i].borrowedSum.toFixed()
+           liquidate_account["adjustedBorrowedSum"] = accounts[i].adjustedBorrowedSum.toFixed()
+           liquidate_account["collateral"] = accounts[i]["collateral"].map((a) => ({
                                               tokenId:a.tokenId,
                                               shares:a.shares.toFixed(),
                                               balance:a.balance.toFixed(),
                                           }));
-           liquidate_account["borrowed"] = accountsWithDebt[i]["borrowed"].map((a) => ({
+           liquidate_account["borrowed"] = accounts[i]["borrowed"].map((a) => ({
                                             tokenId:a.tokenId,
                                             shares:a.shares.toFixed(),
                                             balance:a.balance.toFixed(),
