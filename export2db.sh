@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+
 mkdir -p logs
 export NEAR_ENV=mainnet
 export NEAR_ACCOUNT_ID=$YOUR_ACCOUNT_ID
@@ -11,5 +11,5 @@ while :
 do
   date | tee -a logs/export2db_$DATE.txt
   /usr/local/bin/node ./src/export2db.js 2>&1 | tee -a logs/export2db_$DATE.txt
-  sleep 30
+  sleep 60
 done

@@ -155,7 +155,7 @@ module.exports = {
                   return
               }
               // log the output received from the command
-              console.log("Output: \n", output)
+              // console.log("Output: \n", output)
             })
             console.log(`File ${FILENAME} saved`);
           }
