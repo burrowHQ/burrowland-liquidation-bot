@@ -4,30 +4,52 @@ const { bigMin } = require("./utils");
 const volatilityRatioCmp = (a, b) =>
   b.asset.config.volatilityRatio.cmp(a.asset.config.volatilityRatio);
 
-const parseAccountAsset = (a) => {
+const parseAccountAsset = ([tokenId, shares]) => {
+  return {
+    tokenId,
+    shares: Big(shares),
+    balance: null,
+  };
+};
+
+const parseAccountAssetDetailed = (a) => {
   return {
     tokenId: a.tokenId,
     shares: Big(a.shares),
+    balance: a.balance ? Big(a.balance) : null,
   };
 };
 
 const parseAccount = (a) => {
   return {
+    accountId: a.account_id,
+    collateral: Object.entries(a.collateral).map(parseAccountAsset),
+    borrowed: Object.entries(a.borrowed).map(parseAccountAsset),
+    supplied: Object.entries(a.supplied).map(parseAccountAsset),
+  };
+};
+
+const parseAccountDetailed = (a) => {
+  return {
     accountId: a.accountId,
-    collateral: a.collateral.map(parseAccountAsset),
-    borrowed: a.borrowed.map(parseAccountAsset),
+    collateral: a.collateral.map(parseAccountAssetDetailed),
+    borrowed: a.borrowed.map(parseAccountAssetDetailed),
+    supplied: a.supplied?.map(parseAccountAssetDetailed),
   };
 };
 
 const processAccountAsset = (a, assets, prices, supplied) => {
   const asset = assets[a.tokenId];
   const pool = supplied ? asset.supplied : asset.borrowed;
-  const price = prices.prices[a.tokenId];
+  const price = prices?.prices[a.tokenId];
   a.asset = asset;
   a.price = price;
   a.balance = pool.balance
     .mul(a.shares)
     .div(pool.shares)
+    .round(0, supplied ? 0 : 3);
+  a.tokenBalance = a.balance
+    .div(Big(10).pow(asset.config.extraDecimals))
     .round(0, supplied ? 0 : 3);
   a.pricedBalance = price
     ? a.balance
@@ -70,13 +92,16 @@ const recomputeAccountDiscount = (account) => {
 };
 
 const processAccount = (account, assets, prices) => {
-  account.collateral.forEach(
-    (a) => (a = processAccountAsset(a, assets, prices, true))
+  account.collateral.forEach((a) =>
+    processAccountAsset(a, assets, prices, true)
   );
   account.collateralSum = assetPricedSum(account.collateral);
   account.adjustedCollateralSum = assetAdjustedPricedSum(account.collateral);
   account.borrowed.forEach((a) =>
     processAccountAsset(a, assets, prices, false)
+  );
+  account.supplied?.forEach((a) =>
+    processAccountAsset(a, assets, prices, true)
   );
   account.borrowedSum = assetPricedSum(account.borrowed);
   account.adjustedBorrowedSum = assetAdjustedPricedSum(account.borrowed);
@@ -85,7 +110,12 @@ const processAccount = (account, assets, prices) => {
   return account;
 };
 
-const computeLiquidation = (account) => {
+const computeLiquidation = (
+  account,
+  maxLiquidationAmount = Big(10).pow(18),
+  maxWithdrawCount = 0,
+  liquidator
+) => {
   // When liquidating, it's beneficial to take collateral with higher volatilityRatio first, because
   // it will decrease the adjustedCollateralSum less. Similarly it's more beneficial to
   // repay debt with higher volatilityRatio first, because it'll decrease adjustedBorrowedSum less.
@@ -112,10 +142,13 @@ const computeLiquidation = (account) => {
   const maxHealthFactor = Big(995).div(1000);
   const minPricedBalance = Big(1).div(100);
   let totalPricedProfit = Big(0);
+  let totalPricedAmount = Big(0);
   while (
     collateralIndex < account.collateral.length &&
     borrowedIndex < account.borrowed.length &&
-    account.healthFactor.lt(maxHealthFactor)
+    account.healthFactor.lt(maxHealthFactor) &&
+    totalPricedAmount.lt(maxLiquidationAmount)
+    && liquidator.healthFactor >= 1
   ) {
     const collateral = account.collateral[collateralIndex];
 
@@ -126,15 +159,15 @@ const computeLiquidation = (account) => {
 
     const borrowed = account.borrowed[borrowedIndex];
 
-    if (borrowed.pricedBalance.lt(minPricedBalance)) {
+    if (borrowed.pricedBalance.lt(minPricedBalance) || !borrowed.asset.config.canBorrow) {
       borrowedIndex++;
       continue;
     }
 
     const discountedPricedBalance = collateral.pricedBalance.mul(discountMul);
     const maxPricedAmount = bigMin(
-      discountedPricedBalance,
-      borrowed.pricedBalance
+      bigMin(discountedPricedBalance, borrowed.pricedBalance),
+      maxLiquidationAmount.sub(totalPricedAmount)
     );
     // Need to compute pricedAmount that the new health factor still less than 100%
     // adjColSum - X / discountMul * col_vol(60%) = adjBorSum - X / bor_vol(95%)
@@ -151,6 +184,7 @@ const computeLiquidation = (account) => {
       : maxPricedAmount.mul(2);
 
     const pricedAmount = bigMin(maxHealthAmount, maxPricedAmount);
+    totalPricedAmount = totalPricedAmount.add(pricedAmount);
 
     const collateralPricedAmount = pricedAmount.div(discountMul);
 
@@ -232,6 +266,10 @@ const computeLiquidation = (account) => {
     );
 
     recomputeAccountDiscount(account);
+
+
+    liquidator.adjustedBorrowedSum = liquidator.adjustedBorrowedSum.add(adjustedBorrowedAmount)
+    recomputeAccountDiscount(liquidator); // re-calculate liquidator's discount
   }
   // console.log(
   //   `After liq: ${account.accountId} -> health ${account.healthFactor
@@ -263,9 +301,33 @@ const computeLiquidation = (account) => {
       amount: a.amount.toFixed(0),
     })),
   };
+  const actions = {
+    Execute: {
+      actions: [
+        ...liquidationAction.in_assets.map(({ amount, token_id }) => ({
+          Borrow: {
+            token_id,
+            amount: Big(amount).add(1000).toFixed(0), // Add small fraction to avoid rounding errors with shares.
+          },
+        })),
+        {
+          Liquidate: liquidationAction,
+        },
+        ...liquidationAction.out_assets
+          .slice(0, maxWithdrawCount)
+          .map(({ amount, token_id }) => ({
+            Withdraw: {
+              token_id,
+              max_amount: amount,
+            },
+          })),
+      ],
+    },
+  };
+
   // console.log(liquidationAction);
   return {
-    liquidationAction,
+    actions,
     totalPricedProfit,
     origDiscount,
     origHealth,
@@ -275,6 +337,7 @@ const computeLiquidation = (account) => {
 
 module.exports = {
   parseAccount,
+  parseAccountDetailed,
   processAccount,
   computeLiquidation,
 };
