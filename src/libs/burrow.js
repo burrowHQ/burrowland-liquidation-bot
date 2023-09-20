@@ -218,8 +218,8 @@ module.exports = {
             if(action.hasOwnProperty("Liquidate")){
               await liquidationlog_model.create({
                 account_id: action["Liquidate"].account_id,
-                healhFactor_before: bestLiquidation.origHealth.toFixed(6),
-                healhFactor_after: bestLiquidation.health.toFixed(6),
+                healthFactor_before: bestLiquidation.origHealth.toFixed(6),
+                healthFactor_after: bestLiquidation.health.toFixed(6),
                 liquidation_type: "liquidate",
                 RepaidAssets: action["Liquidate"].in_assets,
                 LiquidatedAssets: action["Liquidate"].out_assets,
@@ -263,8 +263,8 @@ module.exports = {
              
              await liquidationlog_model.create({
                account_id: account.accountId,
-               healhFactor_before: account.healthFactor.toFixed(6),
-               healhFactor_after: "100000",
+               healthFactor_before: account.healthFactor.toFixed(6),
+               healthFactor_after: "100000",
                liquidation_type: "ForceClose",
                RepaidAssets: [],
                LiquidatedAssets: [],
