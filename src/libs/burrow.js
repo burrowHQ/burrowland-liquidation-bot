@@ -229,8 +229,8 @@ module.exports = {
             }
           }
         }
-        catch {
-          console.log("Error on priceOracleContract.oracle_call.")
+        catch (Error) {
+          console.log("Error: ",Error)
         }
       }
     }
@@ -272,8 +272,8 @@ module.exports = {
                isDeleted: false
              });
           }
-          catch {
-            console.log("Error on priceOracleContract.oracle_call.")
+          catch (Error) {
+             console.log("Error: ",Error)
           }
           return;
         }
