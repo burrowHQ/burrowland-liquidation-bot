@@ -9,9 +9,9 @@ export MIN_REPAY_AMOUNT=1
 export MAX_SLIPPAGE=0.5
 
 cd $(dirname "$0")
-DATE=$(date "+%Y_%m_%d")
 while :
 do
+  DATE=$(date "+%Y_%m_%d")
   date | tee -a logs/rebalance_logs_$DATE.txt
   /usr/local/bin/node ./src/rebalance.js 2>&1 | tee -a logs/rebalance_logs_$DATE.txt
   sleep 5
