@@ -2,7 +2,7 @@ const Big = require("big.js");
 const { bigMin } = require("./utils");
 
 const volatilityRatioCmp = (a, b) =>
-  b.asset.config.volatilityRatio.cmp(a.asset.config.volatilityRatio);
+  b.volatilityRatio.cmp(a.volatilityRatio);
 
 const parseAccountAsset = ([tokenId, shares]) => {
   return {
@@ -21,16 +21,24 @@ const parseAccountAssetDetailed = (a) => {
 };
 
 const parseAccount = (a) => {
-  return {
-    accountId: a.account_id,
-    collateral: Object.entries(a.collateral).map(parseAccountAsset),
-    borrowed: Object.entries(a.borrowed).map(parseAccountAsset),
-    supplied: Object.entries(a.supplied).map(parseAccountAsset),
-  };
+  return Object.entries(a.positions).reduce((allPositions, [position, assetsInfo]) => {
+    const position_type = position == "REGULAR" ? "RegularPosition" : "LPTokenPosition";
+    allPositions.push({
+      position,
+      accountId: a.account_id,
+      collateral: position == "REGULAR" ?
+        Object.entries(assetsInfo[position_type].collateral).map(parseAccountAsset)
+        : [parseAccountAsset([assetsInfo[position_type].lpt_id, assetsInfo[position_type].collateral])],
+      borrowed: Object.entries(assetsInfo[position_type].borrowed).map(parseAccountAsset),
+      supplied: Object.entries(a.supplied).map(parseAccountAsset),
+    })
+    return allPositions;
+  }, []);
 };
 
 const parseAccountDetailed = (a) => {
   return {
+    position: "REGULAR",
     accountId: a.accountId,
     collateral: a.collateral.map(parseAccountAssetDetailed),
     borrowed: a.borrowed.map(parseAccountAssetDetailed),
@@ -61,6 +69,53 @@ const processAccountAsset = (a, assets, prices, supplied) => {
       ? a.pricedBalance.mul(asset.config.volatilityRatio)
       : a.pricedBalance.div(asset.config.volatilityRatio)
     : null;
+  a.volatilityRatio = asset.config.volatilityRatio;
+  return a;
+};
+
+const processAccountAssetByLpInfo = (a, assets, prices, lp_token_infos, supplied) => {
+  const asset = assets[a.tokenId];
+  const pool = supplied ? asset.supplied : asset.borrowed;
+  const unit_share_tokens = lp_token_infos?.[a.tokenId];
+  a.asset = asset;
+  a.price = {
+    multiplier: Object.values(unit_share_tokens.tokens).reduce((sum, unit_share_token_value) => {
+      const token_asset = assets[unit_share_token_value.token_id];
+      const token_stdd_amount = Big(unit_share_token_value.amount).mul(Big(10).pow(token_asset.config.extraDecimals));
+      const price = prices?.prices[unit_share_token_value.token_id];
+      return sum.add(token_stdd_amount.mul(price.multiplier)
+        .div(Big(10).pow(price.decimals + token_asset.config.extraDecimals)));
+    }, Big(0)).mul(Big(10000)).round(0, 0),
+    decimals: unit_share_tokens.decimals + 4
+  }
+  a.unit_share_tokens = unit_share_tokens;
+  a.balance = pool.balance
+    .mul(a.shares)
+    .div(pool.shares)
+    .round(0, supplied ? 0 : 3);
+  a.tokenBalance = a.balance
+    .div(Big(10).pow(asset.config.extraDecimals))
+    .round(0, supplied ? 0 : 3);
+  if (unit_share_tokens != undefined) {
+    const unit_share = Big(10).pow(unit_share_tokens.decimals);
+    a.pricedBalance = Object.values(unit_share_tokens.tokens).reduce((sum, unit_share_token_value) => {
+      const token_asset = assets[unit_share_token_value.token_id];
+      const token_stdd_amount = new Big(unit_share_token_value.amount).mul(Big(10).pow(token_asset.config.extraDecimals));
+      const token_balance = Big(token_stdd_amount).mul(Big(a.balance)).div(Big(10).pow(asset.config.extraDecimals)).div(Big(unit_share)) ;
+      const price = prices?.prices[unit_share_token_value.token_id];
+      return sum.add(token_balance.mul(price.multiplier)
+        .div(Big(10).pow(price.decimals + token_asset.config.extraDecimals)));
+    }, Big(0));
+    a.adjustedPricedBalance = Object.values(unit_share_tokens.tokens).reduce((sum, unit_share_token_value) => {
+      const token_asset = assets[unit_share_token_value.token_id];
+      const token_stdd_amount = new Big(unit_share_token_value.amount).mul(Big(10).pow(token_asset.config.extraDecimals));
+      const token_balance = Big(token_stdd_amount).mul(Big(a.balance)).div(Big(10).pow(asset.config.extraDecimals)).div(Big(unit_share)) ;
+      const price = prices?.prices[unit_share_token_value.token_id];
+      return sum.add(token_balance.mul(price.multiplier)
+        .div(Big(10).pow(price.decimals + token_asset.config.extraDecimals)).mul(token_asset.config.volatilityRatio));
+    }, Big(0)).mul(asset.config.volatilityRatio);
+    a.volatilityRatio = a.adjustedPricedBalance.div(a.pricedBalance).round(2, Big.roundDown);
+  }
   return a;
 };
 
@@ -91,10 +146,14 @@ const recomputeAccountDiscount = (account) => {
   }
 };
 
-const processAccount = (account, assets, prices) => {
-  account.collateral.forEach((a) =>
-    processAccountAsset(a, assets, prices, true)
-  );
+const processAccount = (account, assets, prices, lp_token_infos=undefined) => {
+  account.collateral.forEach((a) => {
+    if (account.position == "REGULAR") {
+      processAccountAsset(a, assets, prices, true)
+    } else {
+      processAccountAssetByLpInfo(a, assets, prices, lp_token_infos, true)
+    }
+  });
   account.collateralSum = assetPricedSum(account.collateral);
   account.adjustedCollateralSum = assetAdjustedPricedSum(account.collateral);
   account.borrowed.forEach((a) =>
@@ -175,8 +234,8 @@ const computeLiquidation = (
     // adjBorSum - adjColSum = X * (1 / bor_vol - col_vol / discountMul)
     // X = (adjBorSum - adjColSum) / (1 / bor_vol - col_vol / discountMul)
     const denom = Big(1)
-      .div(borrowed.asset.config.volatilityRatio)
-      .sub(collateral.asset.config.volatilityRatio.div(discountMul));
+      .div(borrowed.volatilityRatio)
+      .sub(collateral.volatilityRatio.div(discountMul));
     const maxHealthAmount = denom.gt(0)
       ? account.adjustedBorrowedSum
           .sub(account.adjustedCollateralSum)
@@ -241,10 +300,10 @@ const computeLiquidation = (
     borrowedAsset.amount = borrowedAsset.amount.add(borrowedAmount);
 
     const adjustedCollateralAmount = collateralPricedAmount.mul(
-      collateral.asset.config.volatilityRatio
+      collateral.volatilityRatio
     );
     const adjustedBorrowedAmount = pricedAmount.div(
-      borrowed.asset.config.volatilityRatio
+      borrowed.volatilityRatio
     );
 
     collateral.pricedBalance = collateral.pricedBalance.sub(
@@ -300,6 +359,8 @@ const computeLiquidation = (
       token_id: a.tokenId,
       amount: a.amount.toFixed(0),
     })),
+    position: account.position ? account.position : null,
+    min_token_amounts: account.position == "REGULAR" ? null : new Array(account.collateral[0].unit_share_tokens.tokens.length).fill("0")
   };
   const actions = {
     Execute: {
@@ -314,7 +375,7 @@ const computeLiquidation = (
           Liquidate: liquidationAction,
         },
         ...liquidationAction.out_assets
-          .slice(0, maxWithdrawCount)
+        .slice(0, account.position == "REGULAR" ? maxWithdrawCount : 0)
           .map(({ amount, token_id }) => ({
             Withdraw: {
               token_id,

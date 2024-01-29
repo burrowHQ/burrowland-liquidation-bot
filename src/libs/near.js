@@ -61,6 +61,7 @@ module.exports = {
           "get_number_of_pools",
           "get_deposit",
           "list_rated_tokens",
+          "get_unit_share_token_amounts"
         ],
         changeMethods: ["storage_deposit", "swap", "withdraw"],
       }
@@ -82,6 +83,7 @@ module.exports = {
           "get_asset_farm",
           "get_asset_farms",
           "get_asset_farms_paged",
+          "get_last_lp_token_infos",
         ],
         changeMethods: ["storage_deposit", "execute"],
       }

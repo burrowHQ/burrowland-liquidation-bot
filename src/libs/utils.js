@@ -57,6 +57,10 @@ function saveJson(json, filename) {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 module.exports = {
   bigMin,
   keysToCamel,
@@ -65,4 +69,5 @@ module.exports = {
   parseTimestamp,
   loadJson,
   saveJson,
+  sleep
 };

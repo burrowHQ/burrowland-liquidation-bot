@@ -20,9 +20,49 @@ const FILENAME = "liquidated_list.json";
 
 Big.DP = 27;
 
+const calcRealPricedProfit = (actions, assets, prices, lp_token_infos) => {
+  for (const action of actions.Execute.actions) {
+    if(action.hasOwnProperty("Liquidate")){
+      const inPrice = action["Liquidate"]["in_assets"].reduce((sum, a) => {
+        const asset = assets[a.token_id];
+        const price = prices.prices[a.token_id];
+        return sum.add(Big(a.amount).mul(price.multiplier)
+                  .div(Big(10).pow(price.decimals + asset.config.extraDecimals)));
+      }, Big(0));
+      if (action['position'] == "REGULAR") {
+        const outPrice = action["Liquidate"]["out_assets"].reduce((sum, a) => {
+          const asset = assets[a.token_id];
+          const price = prices.prices[a.token_id];
+          return sum.add(Big(a.amount).mul(price.multiplier)
+                  .div(Big(10).pow(price.decimals + asset.config.extraDecimals)));
+        }, Big(0));
+        return outPrice.sub(inPrice)
+      } else {
+        const a = action["Liquidate"]["out_assets"][0];
+        const asset = assets[a.token_id];
+        const unit_share_tokens = lp_token_infos[a.token_id];
+        const unit_share = Big(10).pow(unit_share_tokens.decimals);
+        let min_token_amounts = []
+        const outPrice = Object.values(unit_share_tokens.tokens).reduce((sum, unit_share_token_value) => {
+          const token_asset = assets[unit_share_token_value.token_id];
+          const token_stdd_amount = new Big(unit_share_token_value.real_amount).mul(Big(10).pow(token_asset.config.extraDecimals));
+          const token_balance = Big(token_stdd_amount).mul(Big(a.amount)).div(Big(10).pow(asset.config.extraDecimals)).div(Big(unit_share)) ;
+          const price = prices.prices[unit_share_token_value.token_id];
+          min_token_amounts.push(token_stdd_amount.div(Big(10).pow(token_asset.config.extraDecimals)).toFixed(0));
+          return sum.add(token_balance.mul(price.multiplier)
+            .div(Big(10).pow(price.decimals + token_asset.config.extraDecimals)));
+        }, Big(0));
+        action["Liquidate"]["min_token_amounts"] = min_token_amounts
+        return outPrice.sub(inPrice)
+      }
+    }
+  }
+  return 0;
+}
+
 module.exports = {
   main: async (nearObjects, { liquidate = false, forceClose = false, export2db = false } = {}) => {
-    const { burrowContract, priceOracleContract, NearConfig } = nearObjects;
+    const { burrowContract, refFinanceContract, priceOracleContract, NearConfig } = nearObjects;
 
     const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
     const assets = rawAssets.reduce((assets, [assetId, asset]) => {
@@ -39,6 +79,16 @@ module.exports = {
         burrowContract.get_num_accounts(),
       ])
     ).map(keysToCamel);
+
+    let lp_token_infos = await burrowContract.get_last_lp_token_infos();
+    for (var shadow_token_id in lp_token_infos) {
+      const pool_id = shadow_token_id.split("-")[1];
+      const unit_share_token_amounts = await refFinanceContract.get_unit_share_token_amounts({pool_id: parseInt(pool_id)})
+      Object.entries(unit_share_token_amounts).forEach(([index, value]) => {
+        lp_token_infos[shadow_token_id].tokens[index]['real_amount'] = value
+      });
+    }
+
     const numAccounts = parseInt(numAccountsStr);
 
     const prices = parsePriceData(rawPriceData);
@@ -55,7 +105,9 @@ module.exports = {
     }
     const accounts = (await Promise.all(promises))
       .flat()
-      .map((a) => processAccount(parseAccount(a), assets, prices))
+      .map((a) => parseAccount(a))
+      .flat()
+      .map((a) => processAccount(a, assets, prices, lp_token_infos))
       .filter((a) => !!a.healthFactor);
 
     accounts.sort((a, b) => {
@@ -67,7 +119,7 @@ module.exports = {
         .filter((a) => a.healthFactor.lt(2))
         .map(
           (a) =>
-            `${a.accountId} -> ${a.healthFactor
+            `${a.accountId} ${a.position}-> ${a.healthFactor
               .mul(100)
               .toFixed(2)}% -> $${a.borrowedSum.toFixed(2)}`
         )
@@ -163,31 +215,40 @@ module.exports = {
           }
         });
     }
-    // read liquidator account from burrowland
-    const burrowAccount = processAccount(
-      parseAccountDetailed(
-        keysToCamel(
-          await burrowContract.get_account({
-            account_id: NearConfig.accountId,
-          })
-        )
-      ),
-      assets,
-      prices
-    );
 
     let bestLiquidation = null;
     if (liquidate) {
       for (let i = 0; i < accountsWithDebt.length; ++i) {
+        if (accountsWithDebt[i].accountId == NearConfig.accountId) {
+          continue;
+        }
+        // read liquidator account from burrowland
+        const burrowAccount = processAccount(
+          parseAccountDetailed(
+            keysToCamel(
+              await burrowContract.get_account({
+                account_id: NearConfig.accountId,
+              })
+            )
+          ),
+          assets,
+          prices
+        );
         const liquidation = computeLiquidation(
           accountsWithDebt[i],
           NearConfig.maxLiquidationAmount,
           NearConfig.maxWithdrawCount,
           burrowAccount
         );
-        const { totalPricedProfit, origDiscount, origHealth, health } =
+        if (burrowAccount.healthFactor.lt(Big(1))) {
+          console.log("signer account not enough collateral");
+          continue;
+        }
+        const { actions, totalPricedProfit, origDiscount, origHealth, health } =
           liquidation;
+        let realPricedProfit = calcRealPricedProfit(actions, assets, prices, lp_token_infos);
         if (
+          realPricedProfit.lte(NearConfig.minProfit) ||
           totalPricedProfit.lte(NearConfig.minProfit) ||
           origDiscount.lte(NearConfig.minDiscount) ||
           origHealth.gte(health)
@@ -204,28 +265,38 @@ module.exports = {
       if (bestLiquidation) {
         console.log("Executing liquidation");
         const msg = JSON.stringify(bestLiquidation.actions);
+        console.log("liquidate", JSON.stringify(msg));
         try {
-           await priceOracleContract.oracle_call(
-             {
-               receiver_id: NearConfig.burrowContractId,
-               msg,
-             },
-             Big(10).pow(12).mul(300).toFixed(0),
-             "1"
-           );
-           
-          for (const action of bestLiquidation.actions.Execute.actions) {
-            if(action.hasOwnProperty("Liquidate")){
-              await liquidationlog_model.create({
-                account_id: action["Liquidate"].account_id,
-                healthFactor_before: bestLiquidation.origHealth.toFixed(6),
-                healthFactor_after: bestLiquidation.health.toFixed(6),
-                liquidation_type: "liquidate",
-                RepaidAssets: action["Liquidate"].in_assets,
-                LiquidatedAssets: action["Liquidate"].out_assets,
-                isRead: false,
-                isDeleted: false
-              });
+          const outcome = await nearObjects.account.functionCall(
+            NearConfig.priceOracleContractId,
+            "oracle_call",
+            {
+              receiver_id: NearConfig.burrowContractId,
+              msg,
+            },
+            Big(10).pow(12).mul(300).toFixed(0),
+            "1",
+          );
+          let is_success = Object.values(outcome['receipts_outcome']).reduce((is_success, receipt) => {
+            if (receipt["outcome"]["status"].hasOwnProperty("Failure")) {
+              return false;
+            }
+            return is_success;
+          }, true);
+          if (is_success) {
+            for (const action of bestLiquidation.actions.Execute.actions) {
+              if(action.hasOwnProperty("Liquidate")){
+                await liquidationlog_model.create({
+                  account_id: action["Liquidate"].account_id,
+                  healthFactor_before: bestLiquidation.origHealth.toFixed(6),
+                  healthFactor_after: bestLiquidation.health.toFixed(6),
+                  liquidation_type: "liquidate",
+                  RepaidAssets: action["Liquidate"].in_assets,
+                  LiquidatedAssets: action["Liquidate"].out_assets,
+                  isRead: false,
+                  isDeleted: false
+                });
+              }
             }
           }
         }
@@ -245,32 +316,44 @@ module.exports = {
                 {
                   ForceClose: {
                     account_id: account.accountId,
+                    position: account.position ? account.position : null,
+                    min_token_amounts: account.position == "REGULAR" ? null : new Array(account.collateral[0].unit_share_tokens.tokens.length).fill("0")
                   },
                 },
               ],
             },
           });
+          console.log("force closing", account.position, JSON.stringify(msg));
           
           try {
-             await priceOracleContract.oracle_call(
-               {
-                 receiver_id: NearConfig.burrowContractId,
-                 msg,
-               },
-               Big(10).pow(12).mul(300).toFixed(0),
-               "1"
-             );
-             
-             await liquidationlog_model.create({
-               account_id: account.accountId,
-               healthFactor_before: account.healthFactor.toFixed(6),
-               healthFactor_after: "100000",
-               liquidation_type: "ForceClose",
-               RepaidAssets: [],
-               LiquidatedAssets: [],
-               isRead: false,
-               isDeleted: false
-             });
+            const outcome = await nearObjects.account.functionCall(
+              NearConfig.priceOracleContractId,
+              "oracle_call",
+              {
+                receiver_id: NearConfig.burrowContractId,
+                msg,
+              },
+              Big(10).pow(12).mul(300).toFixed(0),
+              "1",
+            );
+            let is_success = Object.values(outcome['receipts_outcome']).reduce((is_success, receipt) => {
+              if (receipt["outcome"]["status"].hasOwnProperty("Failure")) {
+                return false;
+              }
+              return is_success;
+            }, true);
+            if (is_success) {
+              await liquidationlog_model.create({
+                account_id: account.accountId,
+                healthFactor_before: account.healthFactor.toFixed(6),
+                healthFactor_after: "100000",
+                liquidation_type: "ForceClose",
+                RepaidAssets: [],
+                LiquidatedAssets: [],
+                isRead: false,
+                isDeleted: false
+              });
+            }
           }
           catch (Error) {
              console.log("Error: ",Error)

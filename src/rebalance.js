@@ -10,7 +10,7 @@ const { refSell, refBuy } = require("./libs/refExchange");
 Big.DP = 27;
 
 async function main(nearObjects, rebalance) {
-  const { tokenContract, burrowContract, priceOracleContract, NearConfig } =
+  const { tokenContract, refFinanceContract, burrowContract, priceOracleContract, NearConfig } =
     nearObjects;
 
   const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
@@ -136,11 +136,28 @@ async function main(nearObjects, rebalance) {
     return main(nearObjects, rebalance);
   }
 
+  let deposits = await refFinanceContract.get_deposits({ account_id: NearConfig.accountId })
+  let withdrawDepositPromises = []
+  Object.entries(deposits).forEach(([token_id, amount]) => {
+    if (amount > 0) {
+      withdrawDepositPromises.push(
+        refFinanceContract.withdraw(
+          { token_id, amount },
+          Big(10).pow(12).mul(300).toFixed(0),
+          "1"
+        ),
+      );
+    }
+  })
+  if (withdrawDepositPromises.length > 0) {
+    await Promise.all(withdrawDepositPromises);
+  }
+
   // Attempting to sell non-sold tokens
   let tokenIds = Object.keys(assets);
   for (let i = 0; i < tokenIds.length; ++i) {
     const tokenId = tokenIds[i];
-    if (tokenId === NearConfig.wrapNearAccountId) {
+    if (tokenId === NearConfig.wrapNearAccountId || tokenId.substring(0, 14) == "shadow_ref_v1-") {
       // Don't attempt sell wNEAR
       continue;
     }

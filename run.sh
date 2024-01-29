@@ -13,9 +13,9 @@ export DB_NAME=refdb
 export DB_USER=postgres
 export DB_PASSWORD=yourpassword
 cd $(dirname "$0")
-DATE=$(date "+%Y_%m_%d")
 while :
 do
+  DATE=$(date "+%Y_%m_%d")
   date | tee -a logs/logs_$DATE.txt
   /usr/local/bin/node ./src/liquidate.js 2>&1 | tee -a logs/logs_$DATE.txt
   sleep 5

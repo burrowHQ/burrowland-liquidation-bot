@@ -18,7 +18,33 @@ module.exports = {
             wrapNearAccountId: "wrap.near",
           };
         case "development":
-        case "testnet":
+          return {
+            networkId: "testnet",
+            nodeUrl: process.env.NODE_URL || "https://rpc.testnet.near.org",
+            walletUrl: "https://wallet.testnet.near.org",
+            helperUrl: "https://helper.testnet.near.org",
+            explorerUrl: "https://explorer.testnet.near.org",
+            refFinanceContractId: "dev-1704418570028-31304846290234",
+            // refFinanceContractId: "ref-finance-101.testnet",
+            priceOracleContractId: "dev-1700791085144-86637101874849",
+            burrowContractId: "dev-1702353298377-47206148439586",
+            accountId: process.env.NEAR_ACCOUNT_ID,
+            wrapNearAccountId: "wrap.testnet",
+          };
+        case "testnet_dev":
+          return {
+            networkId: "testnet",
+            nodeUrl: process.env.NODE_URL || "https://rpc.testnet.near.org",
+            walletUrl: "https://wallet.testnet.near.org",
+            helperUrl: "https://helper.testnet.near.org",
+            explorerUrl: "https://explorer.testnet.near.org",
+            refFinanceContractId: "exchange.ref-dev.testnet",
+            priceOracleContractId: "mock-priceoracle.testnet",
+            burrowContractId: "contract.1689937928.burrow.testnet",
+            accountId: process.env.NEAR_ACCOUNT_ID,
+            wrapNearAccountId: "wrap.testnet",
+          };
+        case "testnet_public":
           return {
             networkId: "testnet",
             nodeUrl: process.env.NODE_URL || "https://rpc.testnet.near.org",
