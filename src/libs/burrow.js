@@ -29,7 +29,7 @@ const calcRealPricedProfit = (actions, assets, prices, lp_token_infos) => {
         return sum.add(Big(a.amount).mul(price.multiplier)
                   .div(Big(10).pow(price.decimals + asset.config.extraDecimals)));
       }, Big(0));
-      if (action['position'] == "REGULAR") {
+      if (action['Liquidate']['position'] == "REGULAR") {
         const outPrice = action["Liquidate"]["out_assets"].reduce((sum, a) => {
           const asset = assets[a.token_id];
           const price = prices.prices[a.token_id];
@@ -246,13 +246,14 @@ module.exports = {
         }
         const { actions, totalPricedProfit, origDiscount, origHealth, health } =
           liquidation;
-        let realPricedProfit = calcRealPricedProfit(actions, assets, prices, lp_token_infos);
         if (
-          realPricedProfit.lte(NearConfig.minProfit) ||
           totalPricedProfit.lte(NearConfig.minProfit) ||
           origDiscount.lte(NearConfig.minDiscount) ||
           origHealth.gte(health)
         ) {
+          continue;
+        }
+        if (calcRealPricedProfit(actions, assets, prices, lp_token_infos).lte(NearConfig.minProfit)) {
           continue;
         }
         if (

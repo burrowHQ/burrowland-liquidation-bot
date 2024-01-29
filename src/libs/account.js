@@ -336,7 +336,7 @@ const computeLiquidation = (
   //     .toFixed(2)}% discount ${account.discount.mul(100).toFixed(2)}%`
   // );
   console.log(
-    `Maybe liq ${account.accountId} -> discount ${origDiscount
+    `Maybe liq ${account.accountId} -> position ${account.position} -> discount ${origDiscount
       .mul(100)
       .toFixed(2)}% -> profit $${totalPricedProfit.toFixed(3)}`
   );
