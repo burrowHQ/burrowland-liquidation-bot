@@ -48,7 +48,7 @@ const calcRealPricedProfit = (actions, assets, prices, lp_token_infos) => {
           const token_stdd_amount = new Big(unit_share_token_value.real_amount).mul(Big(10).pow(token_asset.config.extraDecimals));
           const token_balance = Big(token_stdd_amount).mul(Big(a.amount)).div(Big(10).pow(asset.config.extraDecimals)).div(Big(unit_share)) ;
           const price = prices.prices[unit_share_token_value.token_id];
-          min_token_amounts.push(token_stdd_amount.div(Big(10).pow(token_asset.config.extraDecimals)).toFixed(0));
+          min_token_amounts.push(token_balance.div(Big(10).pow(token_asset.config.extraDecimals)).mul(Big("0.95")).toFixed(0));
           return sum.add(token_balance.mul(price.multiplier)
             .div(Big(10).pow(price.decimals + token_asset.config.extraDecimals)));
         }, Big(0));

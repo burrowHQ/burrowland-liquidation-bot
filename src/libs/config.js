@@ -52,8 +52,8 @@ module.exports = {
             helperUrl: "https://helper.testnet.near.org",
             explorerUrl: "https://explorer.testnet.near.org",
             refFinanceContractId: "ref-finance-101.testnet",
-            priceOracleContractId: "priceoracle.testnet",
-            burrowContractId: "contract.1638481328.burrow.testnet",
+            priceOracleContractId: "mock-priceoracle.testnet",
+            burrowContractId: "contract.burrow.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
           };
