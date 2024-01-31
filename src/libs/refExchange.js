@@ -1,7 +1,7 @@
 //! The code below is based on skyward finance https://github.com/skyward-finance/app-ui.
 
 const Big = require("big.js");
-const { loadJson, saveJson, keysToCamel } = require("./utils");
+const { loadJson, saveJson, keysToCamel, sleep } = require("./utils");
 
 const SimplePool = "SIMPLE_POOL";
 const StablePool = "STABLE_SWAP";
@@ -548,7 +548,12 @@ async function refSell(nearObjects, tokenId, amountIn) {
     amountIn
   );
 
-  return executeSwap(nearObjects, swapInfo);
+  if (swapInfo.pools) {
+    return executeSwap(nearObjects, swapInfo);
+  } else {
+    console.log("refSell ", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
+    await sleep(10000);
+  }
 }
 
 async function refBuy(nearObjects, tokenId, amountOut) {
@@ -567,7 +572,12 @@ async function refBuy(nearObjects, tokenId, amountOut) {
     amountOut
   );
 
-  return executeSwap(nearObjects, swapInfo);
+  if (swapInfo.pools) {
+    return executeSwap(nearObjects, swapInfo);
+  } else {
+    console.log("refBuy ", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
+    await sleep(10000);
+  }
 }
 
 module.exports = {
