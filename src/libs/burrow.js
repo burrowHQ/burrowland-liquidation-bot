@@ -156,6 +156,7 @@ module.exports = {
            if(parseFloat(accounts[i].healthFactor) > 2.0) continue;
            const liquidate_account = {}
            liquidate_account["account_id"] = accounts[i].accountId;
+           liquidate_account["position"] = accounts[i].position;
            liquidate_account["healthFactor"] = accounts[i].healthFactor;
            liquidate_account["discount"] = accounts[i].discount;
            liquidate_account["collateralSum"] = accounts[i].collateralSum.toFixed()
