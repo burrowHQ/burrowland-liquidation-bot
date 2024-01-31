@@ -140,7 +140,7 @@ async function main(nearObjects, rebalance) {
   let tokenIds = Object.keys(assets);
   for (let i = 0; i < tokenIds.length; ++i) {
     const tokenId = tokenIds[i];
-    if (tokenId === NearConfig.wrapNearAccountId) {
+    if (tokenId === NearConfig.wrapNearAccountId || tokenId.substring(0, 14) == "shadow_ref_v1-") {
       // Don't attempt sell wNEAR
       continue;
     }

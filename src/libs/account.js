@@ -21,12 +21,21 @@ const parseAccountAssetDetailed = (a) => {
 };
 
 const parseAccount = (a) => {
-  return {
-    accountId: a.account_id,
-    collateral: Object.entries(a.collateral).map(parseAccountAsset),
-    borrowed: Object.entries(a.borrowed).map(parseAccountAsset),
-    supplied: Object.entries(a.supplied).map(parseAccountAsset),
-  };
+  if (a.positions['REGULAR']) {
+    return {
+      accountId: a.account_id,
+      collateral: Object.entries(a.positions['REGULAR']['RegularPosition'].collateral).map(parseAccountAsset),
+      borrowed: Object.entries(a.positions['REGULAR']['RegularPosition'].borrowed).map(parseAccountAsset),
+      supplied: Object.entries(a.supplied).map(parseAccountAsset),
+    };
+  } else {
+    return {
+      accountId: a.account_id,
+      collateral: [],
+      borrowed: [],
+      supplied: Object.entries(a.supplied).map(parseAccountAsset),
+    };
+  }
 };
 
 const parseAccountDetailed = (a) => {
