@@ -1,7 +1,8 @@
 const Big = require("big.js");
-const { keysToCamel } = require("./utils");
+const { keysToCamel, PYTH_STALENESS_THRESHOLD } = require("./utils");
 const { parseAsset } = require("./asset");
 const { parsePriceData } = require("./priceData");
+const { main: check_margin_position } = require("./margin");
 const {
   parseAccount,
   parseAccountDetailed,
@@ -21,7 +22,7 @@ const FILENAME = "liquidated_list.json";
 Big.DP = 27;
 
 const calcRealPricedProfit = (actions, assets, prices, lp_token_infos) => {
-  for (const action of actions.Execute.actions) {
+  for (const action of actions) {
     if(action.hasOwnProperty("Liquidate")){
       const inPrice = action["Liquidate"]["in_assets"].reduce((sum, a) => {
         const asset = assets[a.token_id];
@@ -60,9 +61,76 @@ const calcRealPricedProfit = (actions, assets, prices, lp_token_infos) => {
   return 0;
 }
 
+const getPythPrices = async (account, burrowContract, pythOracleContract) => {
+  const token_pyth_infos = await burrowContract.get_all_token_pyth_infos();
+  let prices = {};
+  for (const [assetId, pythInfo] of Object.entries(token_pyth_infos)) {
+    if (pythInfo.default_price == null) {
+      let pythPrice = await pythOracleContract.get_price_no_older_than({"price_id": pythInfo.price_identifier, "age": PYTH_STALENESS_THRESHOLD});
+      // console.log(JSON.stringify(pythPrice, undefined, 2));
+      if (pythInfo.extra_call == null) {
+        prices[assetId] = {
+          "multiplier": Big(pythPrice.price).mul(Big(10).pow(pythPrice.expo)).mul(Big(10).pow(pythInfo.fraction_digits)).round(0),
+          "decimals": pythInfo.fraction_digits + pythInfo.decimals
+        };
+      } else {
+        let price = await account.viewFunction(assetId, pythInfo.extra_call, {});
+        prices[assetId] = {
+          "multiplier": Big(pythPrice.price).mul(Big(10).pow(pythPrice.expo)).mul(Big(price)).div(Big(10).pow(24)).mul(Big(10).pow(pythInfo.fraction_digits)).round(0),
+          "decimals": pythInfo.fraction_digits + pythInfo.decimals
+        };
+      }
+    } else {
+      prices[assetId] = {
+        "multiplier": Big(pythInfo.default_price.multiplier),
+        "decimals": pythInfo.default_price.decimals
+      }
+    }
+  }
+  return {"prices": prices}
+}
+
+const getPriceOralcePrices = async (priceOracleContract, assets) => {
+  const rawPriceData = keysToCamel(await priceOracleContract.get_price_data({
+    asset_ids: Object.keys(assets),
+  }));
+  return parsePriceData(rawPriceData)
+}
+
+const execute_with_price_oracle = async (account, NearConfig, actions) => {
+  const msg = JSON.stringify({
+    Execute: {
+      actions
+    }
+  });
+  return await account.functionCall(
+    NearConfig.priceOracleContractId,
+    "oracle_call",
+    {
+      receiver_id: NearConfig.burrowContractId,
+      msg,
+    },
+    Big(10).pow(12).mul(300).toFixed(0),
+    "1",
+  );
+}
+
+const execute_with_pyth_oracle = async (account, NearConfig, actions) => {
+  return await account.functionCall(
+    NearConfig.burrowContractId,
+    "execute_with_pyth",
+    {
+      actions
+    },
+    Big(10).pow(12).mul(300).toFixed(0),
+    "1",
+  );
+    
+}
+
 module.exports = {
-  main: async (nearObjects, { liquidate = false, forceClose = false, export2db = false } = {}) => {
-    const { burrowContract, refFinanceContract, priceOracleContract, NearConfig } = nearObjects;
+  main: async (nearObjects, { liquidate = false, forceClose = false, export2db = false, marginPosition = false } = {}) => {
+    const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, NearConfig } = nearObjects;
 
     const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
     const assets = rawAssets.reduce((assets, [assetId, asset]) => {
@@ -71,14 +139,7 @@ module.exports = {
     }, {});
     // console.log(assets);
 
-    const [rawPriceData, numAccountsStr] = (
-      await Promise.all([
-        priceOracleContract.get_price_data({
-          asset_ids: Object.keys(assets),
-        }),
-        burrowContract.get_num_accounts(),
-      ])
-    ).map(keysToCamel);
+    const burrow_config = await burrowContract.get_config();
 
     let lp_token_infos = await burrowContract.get_last_lp_token_infos();
     for (var shadow_token_id in lp_token_infos) {
@@ -89,10 +150,11 @@ module.exports = {
       });
     }
 
+    const numAccountsStr = await burrowContract.get_num_accounts();
     const numAccounts = parseInt(numAccountsStr);
 
-    const prices = parsePriceData(rawPriceData);
-
+    const prices = burrow_config.enable_price_oracle ? await getPriceOralcePrices(priceOracleContract, assets) : await getPythPrices(account, burrowContract, pythOracleContract);
+    // console.log(JSON.stringify(prices, undefined, 2));
     console.log("Num accounts: ", numAccounts);
     // Due to upgrade to 0.7.0, the supplied are returned from state.
     const limit = 40;
@@ -241,7 +303,7 @@ module.exports = {
           NearConfig.maxWithdrawCount,
           burrowAccount
         );
-        if (burrowAccount.healthFactor.lt(Big(1))) {
+        if (burrowAccount.healthFactor != undefined && burrowAccount.healthFactor.lt(Big(1))) {
           console.log("signer account not enough collateral");
           continue;
         }
@@ -266,19 +328,11 @@ module.exports = {
       }
       if (bestLiquidation) {
         console.log("Executing liquidation");
-        const msg = JSON.stringify(bestLiquidation.actions);
-        console.log("liquidate", JSON.stringify(msg));
+        console.log("actions: ", JSON.stringify(bestLiquidation.actions));
         try {
-          const outcome = await nearObjects.account.functionCall(
-            NearConfig.priceOracleContractId,
-            "oracle_call",
-            {
-              receiver_id: NearConfig.burrowContractId,
-              msg,
-            },
-            Big(10).pow(12).mul(300).toFixed(0),
-            "1",
-          );
+          const outcome = burrow_config.enable_price_oracle ? 
+            await execute_with_price_oracle(account, NearConfig, bestLiquidation.actions) :
+            await execute_with_pyth_oracle(account, NearConfig, bestLiquidation.actions);
           let is_success = Object.values(outcome['receipts_outcome']).reduce((is_success, receipt) => {
             if (receipt["outcome"]["status"].hasOwnProperty("Failure")) {
               return false;
@@ -286,7 +340,8 @@ module.exports = {
             return is_success;
           }, true);
           if (is_success) {
-            for (const action of bestLiquidation.actions.Execute.actions) {
+            console.log("success tx: ", outcome["transaction"]["hash"]);
+            for (const action of bestLiquidation.actions) {
               if(action.hasOwnProperty("Liquidate")){
                 await liquidationlog_model.create({
                   account_id: action["Liquidate"].account_id,
@@ -301,43 +356,31 @@ module.exports = {
               }
             }
           }
-        }
-        catch (Error) {
+        } catch (Error) {
           console.log("Error: ",Error)
         }
       }
     }
     if (forceClose) {
       for (let i = 0; i < accountsWithDebt.length; ++i) {
-        const account = accountsWithDebt[i];
-        if (account.collateralSum.lt(account.borrowedSum)) {
-          console.log("Executing force closing of account", account.accountId);
-          const msg = JSON.stringify({
-            Execute: {
-              actions: [
-                {
-                  ForceClose: {
-                    account_id: account.accountId,
-                    position: account.position ? account.position : null,
-                    min_token_amounts: account.position == "REGULAR" ? null : new Array(account.collateral[0].unit_share_tokens.tokens.length).fill("0")
-                  },
-                },
-              ],
+        const accountDetail = accountsWithDebt[i];
+        if (accountDetail.collateralSum.lt(accountDetail.borrowedSum)) {
+          console.log("Executing force closing of account", accountDetail.accountId);
+          const actions = [
+            {
+              ForceClose: {
+                account_id: accountDetail.accountId,
+                position: accountDetail.position ? accountDetail.position : null,
+                min_token_amounts: accountDetail.position == "REGULAR" ? null : new Array(accountDetail.collateral[0].unit_share_tokens.tokens.length).fill("0")
+              },
             },
-          });
-          console.log("force closing", account.position, JSON.stringify(msg));
+          ];
+          console.log("actions: ", JSON.stringify(actions));
           
           try {
-            const outcome = await nearObjects.account.functionCall(
-              NearConfig.priceOracleContractId,
-              "oracle_call",
-              {
-                receiver_id: NearConfig.burrowContractId,
-                msg,
-              },
-              Big(10).pow(12).mul(300).toFixed(0),
-              "1",
-            );
+            const outcome = burrow_config.enable_price_oracle ? 
+              await execute_with_price_oracle(account, NearConfig, actions) :
+              await execute_with_pyth_oracle(account, NearConfig, actions);
             let is_success = Object.values(outcome['receipts_outcome']).reduce((is_success, receipt) => {
               if (receipt["outcome"]["status"].hasOwnProperty("Failure")) {
                 return false;
@@ -345,9 +388,10 @@ module.exports = {
               return is_success;
             }, true);
             if (is_success) {
+              console.log("success tx: ", outcome["transaction"]["hash"]);
               await liquidationlog_model.create({
-                account_id: account.accountId,
-                healthFactor_before: account.healthFactor.toFixed(6),
+                account_id: accountDetail.accountId,
+                healthFactor_before: accountDetail.healthFactor.toFixed(6),
                 healthFactor_after: "100000",
                 liquidation_type: "ForceClose",
                 RepaidAssets: [],
@@ -356,13 +400,16 @@ module.exports = {
                 isDeleted: false
               });
             }
-          }
-          catch (Error) {
+          } catch (Error) {
              console.log("Error: ",Error)
           }
-          return;
+          break;
         }
       }
+    }
+
+    if (marginPosition) {
+      await check_margin_position(account, burrow_config, NearConfig, burrowContract, assets, prices);
     }
 
     return {

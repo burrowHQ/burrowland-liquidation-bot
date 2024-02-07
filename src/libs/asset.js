@@ -24,6 +24,7 @@ const parseAsset = (a) => {
     borrowed: parsePool(a.borrowed),
     reserved: Big(a.reserved),
     lastUpdateTimestamp: parseTimestamp(a.lastUpdateTimestamp),
+    unitAccHpInterest: Big(a.unitAccHpInterest),
     config: parseConfig(a.config),
   };
 };

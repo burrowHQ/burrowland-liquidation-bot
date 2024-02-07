@@ -13,6 +13,7 @@ module.exports = {
             explorerUrl: "https://explorer.mainnet.near.org",
             refFinanceContractId: "v2.ref-finance.near",
             priceOracleContractId: "priceoracle.near",
+            pythOracleContractId: "pyth-oracle.near",
             burrowContractId: "contract.main.burrow.near",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.near",
@@ -27,9 +28,20 @@ module.exports = {
             refFinanceContractId: "dev-1704418570028-31304846290234",
             // refFinanceContractId: "ref-finance-101.testnet",
             priceOracleContractId: "dev-1700791085144-86637101874849",
-            burrowContractId: "dev-1702353298377-47206148439586",
+            pythOracleContractId: "pyth-oracle.testnet",
+            burrowContractId: "dev-1707132736890-13749887598327",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
+            router: {
+              "usdt.fakes.testnet&dai.fakes.testnet": {
+                dex_id: "dev-1707134085683-95275841586061",
+                pool_id: 0
+              },
+              "dai.fakes.testnet&usdt.fakes.testnet": {
+                dex_id: "dev-1707134085683-95275841586061",
+                pool_id: 0
+              },
+            }
           };
         case "testnet_dev":
           return {
@@ -40,6 +52,7 @@ module.exports = {
             explorerUrl: "https://explorer.testnet.near.org",
             refFinanceContractId: "exchange.ref-dev.testnet",
             priceOracleContractId: "mock-priceoracle.testnet",
+            pythOracleContractId: "pyth-oracle.testnet",
             burrowContractId: "contract.1689937928.burrow.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
@@ -53,6 +66,7 @@ module.exports = {
             explorerUrl: "https://explorer.testnet.near.org",
             refFinanceContractId: "ref-finance-101.testnet",
             priceOracleContractId: "mock-priceoracle.testnet",
+            pythOracleContractId: "pyth-oracle.testnet",
             burrowContractId: "contract.burrow.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
@@ -74,6 +88,7 @@ module.exports = {
     );
     config.maxWithdrawCount = parseInt(process.env.MAX_WITHDRAW_COUNT || "5");
     config.forceClose = !!process.env.FORCE_CLOSE;
+    config.marginPosition = !!process.env.MARGIN_POSITION;
     return config;
   },
 };

@@ -362,29 +362,26 @@ const computeLiquidation = (
     position: account.position ? account.position : null,
     min_token_amounts: account.position == "REGULAR" ? null : new Array(account.collateral[0].unit_share_tokens.tokens.length).fill("0")
   };
-  const actions = {
-    Execute: {
-      actions: [
-        ...liquidationAction.in_assets.map(({ amount, token_id }) => ({
-          Borrow: {
-            token_id,
-            amount: Big(amount).add(1000).toFixed(0), // Add small fraction to avoid rounding errors with shares.
-          },
-        })),
-        {
-          Liquidate: liquidationAction,
-        },
-        ...liquidationAction.out_assets
-        .slice(0, account.position == "REGULAR" ? maxWithdrawCount : 0)
-          .map(({ amount, token_id }) => ({
-            Withdraw: {
-              token_id,
-              max_amount: amount,
-            },
-          })),
-      ],
+  
+  const actions = [
+    ...liquidationAction.in_assets.map(({ amount, token_id }) => ({
+      Borrow: {
+        token_id,
+        amount: Big(amount).add(1000).toFixed(0), // Add small fraction to avoid rounding errors with shares.
+      },
+    })),
+    {
+      Liquidate: liquidationAction,
     },
-  };
+    ...liquidationAction.out_assets
+    .slice(0, account.position == "REGULAR" ? maxWithdrawCount : 0)
+      .map(({ amount, token_id }) => ({
+        Withdraw: {
+          token_id,
+          max_amount: amount,
+        },
+      })),
+  ];
 
   // console.log(liquidationAction);
   return {

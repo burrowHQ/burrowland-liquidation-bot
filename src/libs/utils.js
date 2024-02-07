@@ -1,6 +1,8 @@
 const Big = require("big.js");
 const fs = require("fs");
 
+const PYTH_STALENESS_THRESHOLD = 60;
+
 const toCamel = (s) => {
   return s.replace(/([-_][a-z])/gi, ($1) => {
     return $1.toUpperCase().replace("-", "").replace("_", "");
@@ -69,5 +71,6 @@ module.exports = {
   parseTimestamp,
   loadJson,
   saveJson,
-  sleep
+  sleep,
+  PYTH_STALENESS_THRESHOLD
 };

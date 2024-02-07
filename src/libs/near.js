@@ -84,6 +84,10 @@ module.exports = {
           "get_asset_farms",
           "get_asset_farms_paged",
           "get_last_lp_token_infos",
+          "get_margin_accounts_paged",
+          "get_num_margin_accounts",
+          "get_all_token_pyth_infos",
+          "get_margin_config"
         ],
         changeMethods: ["storage_deposit", "execute"],
       }
@@ -98,6 +102,14 @@ module.exports = {
       }
     );
 
+    const pythOracleContract = new nearAPI.Contract(
+      account,
+      NearConfig.pythOracleContractId,
+      {
+        viewMethods: ["get_price", "get_price_no_older_than"],
+      }
+    );
+
     return {
       near,
       account,
@@ -105,6 +117,7 @@ module.exports = {
       refFinanceContract,
       burrowContract,
       priceOracleContract,
+      pythOracleContract,
       NearConfig,
     };
   },
