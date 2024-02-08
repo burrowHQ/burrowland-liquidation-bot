@@ -84,12 +84,13 @@ module.exports = {
           "get_asset_farms",
           "get_asset_farms_paged",
           "get_last_lp_token_infos",
+          "get_margin_account",
           "get_margin_accounts_paged",
           "get_num_margin_accounts",
           "get_all_token_pyth_infos",
           "get_margin_config"
         ],
-        changeMethods: ["storage_deposit", "execute"],
+        changeMethods: ["storage_deposit", "execute", "margin_execute"],
       }
     );
 

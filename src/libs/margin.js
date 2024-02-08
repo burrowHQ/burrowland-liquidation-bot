@@ -180,7 +180,7 @@ module.exports = {
         .map((a) => processAccount(a, assets, prices, NearConfig, margin_config))
         .filter((a) => (a.is_liquidation && a.actions != null) || (a.is_forceclose && a.actions != null));
 
-    console.log(JSON.stringify(accounts, undefined, 2));
+    // console.log(JSON.stringify(accounts, undefined, 2));
     
 
     let liquidationAccounts = [];
@@ -229,6 +229,39 @@ module.exports = {
       }
       catch (Error) {
          console.log("Error: ",Error)
+      }
+    }
+
+    {
+      const liquidator = await burrowContract.get_margin_account({account_id: NearConfig.accountId});
+
+      const withdrawActions = [];
+      for (let i = 0; i < liquidator.supplied.length; ++i) {
+        const s = liquidator.supplied[i];
+        const asset = assets[s.token_id];
+        const price = prices?.prices[s.token_id];
+        const pricedBalance = Big(s.balance)
+          .mul(price.multiplier)
+          .div(Big(10).pow(price.decimals + asset.config.extraDecimals))
+        if (pricedBalance.gt(NearConfig.minSwapAmount)) {
+          console.log(`Withdrawing ${s.token_id} amount ${s.balance}`);
+          withdrawActions.push({
+            Withdraw: {
+              token_id: s.token_id,
+            },
+          });
+        }
+      }
+      console.log(JSON.stringify(withdrawActions, undefined, 2))
+    
+      if (withdrawActions.length > 0) {
+        await burrowContract.margin_execute(
+          {
+            actions: withdrawActions,
+          },
+          Big(10).pow(12).mul(300).toFixed(0),
+          "1"
+        );
       }
     }
   }
