@@ -64,7 +64,7 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
         min_token_d_amount: min_token_d_amount_arg.toFixed(0),
         swap_indication: {
           dex_id: NearConfig.router[routerId].dex_id,
-          swap_action_text: JSON.stringify({
+          swap_action_text: NearConfig.router[routerId].dex_type == 1 ? JSON.stringify({
             actions: [{
               pool_id: NearConfig.router[routerId].pool_id,
               token_in: a.token_p_id,
@@ -72,6 +72,14 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
               token_out: a.token_d_info.token_id,
               min_amount_out: min_token_d_amount_arg.div(Big(10).pow(a.d_asset.config.extraDecimals)).round(0, 0).toFixed(0),
             }]
+          }) :
+          JSON.stringify({
+            Swap: {
+              pool_ids: NearConfig.router[routerId].pool_ids,
+              output_token: a.token_d_info.token_id,
+              min_output_amount: min_token_d_amount_arg.div(Big(10).pow(a.d_asset.config.extraDecimals)).round(0, 0).toFixed(0),
+              skip_unwrap_near: true,
+            }
           })
         }
       }
@@ -197,11 +205,11 @@ module.exports = {
     if (liquidationAccounts.length > 0) {
       try {
         if (liquidationAccounts[0].profit.gte(NearConfig.minProfit)) {
+          console.log("liquidation action:");
+          console.log(JSON.stringify(liquidationAccounts[0].actions, undefined, 2));
           const outcome = burrow_config.enable_price_oracle ? 
             await margin_execute_with_price_oracle(account, NearConfig, liquidationAccounts[0].actions) :
             await margin_execute_with_pyth_oracle(account, NearConfig, liquidationAccounts[0].actions);
-          console.log("liquidation action:");
-          console.log(JSON.stringify(liquidationAccounts[0].actions, undefined, 2));
           printOutcome(outcome)
         }
       }
@@ -212,11 +220,11 @@ module.exports = {
 
     if (forcecloseAccounts.length > 0) {
       try {
+        console.log("forceclose action:");
+        console.log(JSON.stringify(forcecloseAccounts[0].actions, undefined, 2));
         const outcome = burrow_config.enable_price_oracle ? 
           await margin_execute_with_price_oracle(account, NearConfig, forcecloseAccounts[0].actions) :
           await margin_execute_with_pyth_oracle(account, NearConfig, forcecloseAccounts[0].actions);
-        console.log("forceclose action:");
-        console.log(JSON.stringify(forcecloseAccounts[0].actions, undefined, 2));
         printOutcome(outcome)
       }
       catch (Error) {
