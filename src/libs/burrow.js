@@ -2,7 +2,6 @@ const Big = require("big.js");
 const { keysToCamel, PYTH_STALENESS_THRESHOLD } = require("./utils");
 const { parseAsset } = require("./asset");
 const { parsePriceData } = require("./priceData");
-const { main: check_margin_position } = require("./margin");
 const {
   parseAccount,
   parseAccountDetailed,
@@ -129,7 +128,7 @@ const execute_with_pyth_oracle = async (account, NearConfig, actions) => {
 }
 
 module.exports = {
-  main: async (nearObjects, { liquidate = false, forceClose = false, export2db = false, marginPosition = false } = {}) => {
+  main: async (nearObjects, { liquidate = false, forceClose = false, export2db = false } = {}) => {
     const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, NearConfig } = nearObjects;
 
     const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
@@ -406,10 +405,6 @@ module.exports = {
           break;
         }
       }
-    }
-
-    if (marginPosition) {
-      await check_margin_position(account, burrow_config, NearConfig, burrowContract, assets, prices);
     }
 
     return {

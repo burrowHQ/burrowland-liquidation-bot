@@ -32,28 +32,6 @@ module.exports = {
             burrowContractId: "dev-1707132736890-13749887598327",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
-            router: {
-              // "usdt.fakes.testnet&dai.fakes.testnet": {
-              //   dex_id: "dev-1707134085683-95275841586061",
-              //   dex_type: 1,
-              //   pool_id: 0
-              // },
-              // "dai.fakes.testnet&usdt.fakes.testnet": {
-              //   dex_id: "dev-1707134085683-95275841586061",
-              //   dex_type: 1,
-              //   pool_id: 0
-              // },
-              "usdt.fakes.testnet&dai.fakes.testnet": {
-                dex_id: "dev-1707136746796-79997967772528",
-                dex_type: 2,
-                pool_ids: ["dai.fakes.testnet|usdt.fakes.testnet|100"]
-              },
-              "dai.fakes.testnet&usdt.fakes.testnet": {
-                dex_id: "dev-1707136746796-79997967772528",
-                dex_type: 2,
-                pool_ids: ["dai.fakes.testnet|usdt.fakes.testnet|100"]
-              },
-            }
           };
         case "testnet_dev":
           return {
@@ -100,7 +78,6 @@ module.exports = {
     );
     config.maxWithdrawCount = parseInt(process.env.MAX_WITHDRAW_COUNT || "5");
     config.forceClose = !!process.env.FORCE_CLOSE;
-    config.marginPosition = !!process.env.MARGIN_POSITION;
     return config;
   },
 };
