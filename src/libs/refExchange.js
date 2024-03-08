@@ -228,9 +228,10 @@ async function prepareRef(nearObjects) {
 
   const limit = 250;
   // Limit pools for now until we need other prices.
-  const [rawNumPools, ratedTokens] = await Promise.all([
+  const [rawNumPools, ratedTokens, frozenlistTokens] = await Promise.all([
     refFinanceContract.get_number_of_pools(),
     refFinanceContract.list_rated_tokens(),
+    refFinanceContract.get_frozenlist_tokens(),
   ]);
 
   const numPools = Math.min(10000, rawNumPools);
@@ -270,6 +271,12 @@ async function prepareRef(nearObjects) {
       pool.pool_kind === StablePool ||
       pool.pool_kind === RatedPool
     ) {
+      const needSkip = pool.token_account_ids.reduce((acc, tokenAccountId) => {
+        return acc || frozenlistTokens.indexOf(tokenAccountId) != -1;
+      }, false);
+      if (needSkip) {
+        continue;
+      }
       const tt = pool.token_account_ids;
       const p = {
         stable: pool.pool_kind === StablePool || pool.pool_kind === RatedPool,

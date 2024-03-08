@@ -61,6 +61,7 @@ module.exports = {
           "get_number_of_pools",
           "get_deposit",
           "list_rated_tokens",
+          "get_frozenlist_tokens",
         ],
         changeMethods: ["storage_deposit", "swap", "withdraw"],
       }
