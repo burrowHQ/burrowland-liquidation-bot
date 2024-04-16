@@ -3,29 +3,38 @@ const os = require("os");
 
 const { getConfig } = require("./config");
 const path = require("path");
+const { decryptAES } = require("./utils");
 
 const NearConfig = getConfig(process.env.NEAR_ENV || "development");
 
 module.exports = {
-  initNear: async (loadAccount, accountPath) => {
+  initNear: async (loadAccount, password) => {
     const keyStore = new nearAPI.keyStores.InMemoryKeyStore();
 
     let near;
     let account;
 
     if (loadAccount) {
-      const keyPath =
-        accountPath ||
-        path.join(
-          os.homedir(),
-          ".near-credentials",
-          NearConfig.networkId,
-          NearConfig.accountId + ".json"
-        );
-      near = await nearAPI.connect(
-        Object.assign({ keyPath, deps: { keyStore } }, NearConfig)
-      );
-      account = new nearAPI.Account(near.connection, NearConfig.accountId);
+      if (NearConfig.encodePrivateKey) {
+        const privateKey = decryptAES(NearConfig.encodePrivateKey, password);
+        if (privateKey == '') {
+          console.error("Invalid password");
+          process.exit(1);
+        }
+        const keyPair = nearAPI.KeyPair.fromString(privateKey);
+        const keyStore = new nearAPI.keyStores.InMemoryKeyStore();
+        keyStore.setKey(NearConfig.networkId, NearConfig.accountId, keyPair);
+        const connection = nearAPI.Connection.fromConfig({
+          networkId: NearConfig.networkId,
+          provider: { type: "JsonRpcProvider", args: { url: NearConfig.nodeUrl } },
+          signer: { type: "InMemorySigner", keyStore },
+          jsvmAccountId: `jsvm.${NearConfig.networkId}`,
+        });
+        account = new nearAPI.Account(connection, NearConfig.accountId);
+      } else {
+        console.error("Missing encodePrivateKey");
+        process.exit(1);
+      }
     } else {
       const nearRpc = new nearAPI.providers.JsonRpcProvider(NearConfig.nodeUrl);
       account = new nearAPI.Account(

@@ -1,5 +1,6 @@
 const Big = require("big.js");
 const fs = require("fs");
+const CryptoJS = require("crypto-js");
 
 const toCamel = (s) => {
   return s.replace(/([-_][a-z])/gi, ($1) => {
@@ -61,6 +62,11 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function decryptAES(ciphertext, key) {
+  const bytes = CryptoJS.AES.decrypt(ciphertext, key);
+  return bytes.toString(CryptoJS.enc.Utf8);
+}
+
 module.exports = {
   bigMin,
   keysToCamel,
@@ -69,5 +75,6 @@ module.exports = {
   parseTimestamp,
   loadJson,
   saveJson,
-  sleep
+  sleep,
+  decryptAES
 };

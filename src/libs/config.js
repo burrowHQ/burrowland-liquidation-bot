@@ -16,6 +16,8 @@ module.exports = {
             burrowContractId: "contract.main.burrow.near",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.near",
+            loopInterval: process.env.LOOP_INTERVAL || 5000,
+            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
           };
         case "development":
           return {
@@ -30,6 +32,8 @@ module.exports = {
             burrowContractId: "dev-1702353298377-47206148439586",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
+            loopInterval: process.env.LOOP_INTERVAL || 5000,
+            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
           };
         case "testnet_dev":
           return {
@@ -43,6 +47,8 @@ module.exports = {
             burrowContractId: "contract.1689937928.burrow.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
+            loopInterval: process.env.LOOP_INTERVAL || 5000,
+            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
           };
         case "testnet_public":
           return {
@@ -56,6 +62,8 @@ module.exports = {
             burrowContractId: "contract.burrow.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
+            loopInterval: process.env.LOOP_INTERVAL || 5000,
+            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
           };
         default:
           throw Error(

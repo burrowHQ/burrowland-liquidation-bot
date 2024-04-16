@@ -6,10 +6,18 @@ const { parseAsset } = require("./libs/asset");
 const { parsePriceData } = require("./libs/priceData");
 const { parseAccountDetailed, processAccount } = require("./libs/account");
 const { refSell, refBuy } = require("./libs/refExchange");
+const readlineSync = require('readline-sync');
+
+function getPassword() {
+  return readlineSync.question('Please enter your password: ', {
+    hideEchoBack: true
+  });
+}
 
 Big.DP = 27;
 
 async function main(nearObjects, rebalance) {
+  console.log(new Date())
   const { tokenContract, refFinanceContract, burrowContract, priceOracleContract, NearConfig } =
     nearObjects;
 
@@ -221,6 +229,14 @@ async function main(nearObjects, rebalance) {
   }
 }
 
-initNear(true, process.env.KEY_PATH || null).then((nearObject) =>
-  main(nearObject, true)
-);
+initNear(true, getPassword()).then((nearObject) => {
+  const executeAsyncOperation = () => {
+    main(nearObject, true).then(() => {
+      setTimeout(executeAsyncOperation, nearObject.NearConfig.loopInterval);
+    }).catch(error => {
+      console.error('Rebalance failed:', error);
+      setTimeout(executeAsyncOperation, nearObject.NearConfig.loopInterval);
+    })
+  }
+  executeAsyncOperation();
+})

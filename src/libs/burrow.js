@@ -62,6 +62,7 @@ const calcRealPricedProfit = (actions, assets, prices, lp_token_infos) => {
 
 module.exports = {
   main: async (nearObjects, { liquidate = false, forceClose = false, export2db = false } = {}) => {
+    console.log(new Date())
     const { burrowContract, refFinanceContract, priceOracleContract, NearConfig } = nearObjects;
 
     const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
