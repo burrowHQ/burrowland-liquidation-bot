@@ -1,5 +1,6 @@
 const Big = require("big.js");
 const fs = require("fs");
+const CryptoJS = require("crypto-js");
 
 const PYTH_STALENESS_THRESHOLD = 60;
 
@@ -63,6 +64,11 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function decryptAES(ciphertext, key) {
+  const bytes = CryptoJS.AES.decrypt(ciphertext, key);
+  return bytes.toString(CryptoJS.enc.Utf8);
+}
+
 module.exports = {
   bigMin,
   keysToCamel,
@@ -72,5 +78,6 @@ module.exports = {
   loadJson,
   saveJson,
   sleep,
-  PYTH_STALENESS_THRESHOLD
+  PYTH_STALENESS_THRESHOLD,
+  decryptAES
 };

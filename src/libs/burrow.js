@@ -130,6 +130,7 @@ const execute_with_pyth_oracle = async (account, NearConfig, actions) => {
 
 module.exports = {
   main: async (nearObjects, { liquidate = false, forceClose = false, export2db = false, marginPosition = false } = {}) => {
+    console.log(new Date())
     const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, NearConfig } = nearObjects;
 
     const rawAssets = keysToCamel(await burrowContract.get_assets_paged());

@@ -3,7 +3,7 @@
 const { initNear } = require("./libs/near");
 const { main } = require("./libs/burrow");
 
-initNear(true).then((nearObject) =>
+initNear(false).then((nearObject) =>
   main(nearObject, {
     liquidate: false,
     forceClose: false,
