@@ -9,15 +9,6 @@ const {
   processAccount,
   computeLiquidation,
 } = require("./account");
-const { Near } = require("near-api-js");
-
-const fs = require("fs");
-const { exec } = require('child_process')
-const request = require("request")
-const liquidationlog_model = require('./models/liquidation_log');
-const seq = require('./models/db');
-
-const FILENAME = "liquidated_list.json";
 
 Big.DP = 27;
 
@@ -129,7 +120,7 @@ const execute_with_pyth_oracle = async (account, NearConfig, actions) => {
 }
 
 module.exports = {
-  main: async (nearObjects, { liquidate = false, forceClose = false, export2db = false, marginPosition = false } = {}) => {
+  main: async (nearObjects, { liquidate = false, forceClose = false, marginPosition = false } = {}) => {
     console.log(new Date())
     const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, NearConfig } = nearObjects;
 
@@ -157,7 +148,7 @@ module.exports = {
     const prices = burrow_config.enable_price_oracle ? await getPriceOralcePrices(priceOracleContract, assets) : await getPythPrices(account, burrowContract, pythOracleContract);
     // console.log(JSON.stringify(prices, undefined, 2));
     console.log("Num accounts: ", numAccounts);
-    // Due to upgrade to 0.7.0, the supplied are returned from state.
+    
     const limit = 40;
 
     const promises = [];
@@ -211,74 +202,6 @@ module.exports = {
     accountsWithDebt.sort((a, b) => {
       return b.discount.cmp(a.discount);
     });
-
-    // select those whose healthFactor less than 2
-    if( export2db ){
-        const liquidation_list = [];
-        for(let i = 0; i < accounts.length;i++){
-           if(parseFloat(accounts[i].healthFactor) > 2.0) continue;
-           const liquidate_account = {}
-           liquidate_account["account_id"] = accounts[i].accountId;
-           liquidate_account["position"] = accounts[i].position;
-           liquidate_account["healthFactor"] = accounts[i].healthFactor;
-           liquidate_account["discount"] = accounts[i].discount;
-           liquidate_account["collateralSum"] = accounts[i].collateralSum.toFixed()
-           liquidate_account["adjustedCollateralSum"] = accounts[i].adjustedCollateralSum.toFixed()
-           liquidate_account["borrowedSum"] = accounts[i].borrowedSum.toFixed()
-           liquidate_account["adjustedBorrowedSum"] = accounts[i].adjustedBorrowedSum.toFixed()
-           liquidate_account["collateral"] = accounts[i]["collateral"].map((a) => ({
-                                              tokenId:a.tokenId,
-                                              shares:a.shares.toFixed(),
-                                              balance:a.balance.toFixed(),
-                                          }));
-           liquidate_account["borrowed"] = accounts[i]["borrowed"].map((a) => ({
-                                            tokenId:a.tokenId,
-                                            shares:a.shares.toFixed(),
-                                            balance:a.balance.toFixed(),
-                                        }));
-
-           liquidation_list.push(liquidate_account);
-        }
-        const json_str = JSON.stringify(liquidation_list)
-        //console.log(json_str);
-        
-        // post the data to REST api
-        request({
-            url: "https://mainnet-indexer.ref-finance.com/add-burrow-liquidation-result",
-            method: "POST",
-            headers: { "content-type": "application/json", },
-            json: liquidation_list
-        }, function (error, response, body) {
-            if (!error && response.statusCode === 200) {
-                // console.log(body)
-            }
-            else {
-                console.log("error: " + error)
-                console.log("response.statusCode: " + response.statusCode)
-                console.log("response.statusText: " + response.statusText)
-            }
-        })
-
-
-        fs.writeFile("./data/tmp.json", json_str, function (err) {
-          if (err) {
-            console.log(err);
-          } else {
-            // run the `cp` command using exec
-            exec('cp ./data/tmp.json ./data/liquidated_list.json', (err, output) => {
-              // once the command has completed, the callback function is called
-              if (err) {
-                  // log and return if we encounter an error
-                  console.error("could not execute command: ", err)
-                  return
-              }
-              // log the output received from the command
-              // console.log("Output: \n", output)
-            })
-            console.log(`File ${FILENAME} saved`);
-          }
-        });
-    }
 
     let bestLiquidation = null;
     if (liquidate) {
@@ -342,20 +265,6 @@ module.exports = {
           }, true);
           if (is_success) {
             console.log("success tx: ", outcome["transaction"]["hash"]);
-            for (const action of bestLiquidation.actions) {
-              if(action.hasOwnProperty("Liquidate")){
-                await liquidationlog_model.create({
-                  account_id: action["Liquidate"].account_id,
-                  healthFactor_before: bestLiquidation.origHealth.toFixed(6),
-                  healthFactor_after: bestLiquidation.health.toFixed(6),
-                  liquidation_type: "liquidate",
-                  RepaidAssets: action["Liquidate"].in_assets,
-                  LiquidatedAssets: action["Liquidate"].out_assets,
-                  isRead: false,
-                  isDeleted: false
-                });
-              }
-            }
           }
         } catch (Error) {
           console.log("Error: ",Error)
@@ -390,16 +299,6 @@ module.exports = {
             }, true);
             if (is_success) {
               console.log("success tx: ", outcome["transaction"]["hash"]);
-              await liquidationlog_model.create({
-                account_id: accountDetail.accountId,
-                healthFactor_before: accountDetail.healthFactor.toFixed(6),
-                healthFactor_after: "100000",
-                liquidation_type: "ForceClose",
-                RepaidAssets: [],
-                LiquidatedAssets: [],
-                isRead: false,
-                isDeleted: false
-              });
             }
           } catch (Error) {
              console.log("Error: ",Error)

@@ -9,8 +9,8 @@ function decryptAES(ciphertext, key) {
   return bytes.toString(CryptoJS.enc.Utf8);
 }
 
-const key = "123";
-const plaintext = "abc";
+const key = "YOUR_PASSWORD";
+const plaintext = "YOUR_PRIVATE_KEY";
 const ciphertext = encryptAES(plaintext, key);
 const decryptedText = decryptAES(ciphertext, key);
 

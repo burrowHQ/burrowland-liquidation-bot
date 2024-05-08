@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { initNear } = require("./libs/near");
-const { main: liquidate } = require("./libs/burrow");
+const { main: liquidateDocker } = require("./libs/burrowDocker");
 const readlineSync = require('readline-sync');
 
 function getPassword() {
@@ -12,7 +12,7 @@ function getPassword() {
 
 initNear(true, getPassword()).then((nearObject) => {
   const executeAsyncOperation = () => {
-    liquidate(nearObject, {
+    liquidateDocker(nearObject, {
       liquidate: true,
       forceClose: nearObject.NearConfig.forceClose,
       marginPosition: nearObject.NearConfig.marginPosition,
