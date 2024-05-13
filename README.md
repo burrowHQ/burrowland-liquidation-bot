@@ -14,7 +14,18 @@ Decrypted text: YOUR_PRIVATE_KEY
 # How to run 
 
 ## Create a configuration file.
-Create your own configuration file based on the `./config.sample.json` file.
+
+Create the JSON configuration file as follows:
+```
+{
+    "accountId": "SIGNER_NEAR_ACCOUNT_ID",
+    "encodePrivateKey": "SIGNER_ENCODE_PRIVATE_KEY",
+    "nodeUrl": "https://rpc.mainnet.near.org",
+    "minProfit": "1.0",
+    "minDiscount": "0.05",
+    "loopInterval": "30000"
+}
+```
 
 The meanings of all configuration items are as follows:
 
@@ -29,8 +40,6 @@ The meanings of all configuration items are as follows:
 `minDiscount`: minimum discount required for liquidation target account, default: 0.05
 - hf = adjustedCollateralValue / adjustedBorrowedValue
 - discount = 0.5 * (1 - hf)
-
-`maxLiquidationAmount`: maximum value repaid in a single liquidation, signer must have sufficient collateral, default: 20000(U)
 
 `loopInterval`: The time interval for executing liquidations in a loop, default: 30000(ms)
 

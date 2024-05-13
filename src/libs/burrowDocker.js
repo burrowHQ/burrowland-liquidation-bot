@@ -199,6 +199,20 @@ module.exports = {
             const signerString = JSON.stringify(await burrowContract.get_account({
               account_id: NearConfig.accountId,
             }));
+            const signerAccount = processAccount(
+              parseAccountDetailed(
+                keysToCamel(
+                  JSON.parse(signerString)
+                )
+              ),
+              assets,
+              prices
+            );
+            const maxLiquidationAmount = signerAccount.adjustedCollateralSum.sub(signerAccount.adjustedBorrowedSum);
+            if (maxLiquidationAmount.lte(Big(0))) {
+              console.log("signer account maxLiquidationAmount <= 0");
+              return;
+            }
             for (let i = 0; i < accountsWithDebt.length; ++i) {
               if (accountsWithDebt[i].accountId == NearConfig.accountId) {
                 continue;
@@ -214,7 +228,7 @@ module.exports = {
               );
               const liquidation = computeLiquidation(
                 accountsWithDebt[i],
-                NearConfig.maxLiquidationAmount,
+                maxLiquidationAmount,
                 NearConfig.maxWithdrawCount,
                 burrowAccount
               );
