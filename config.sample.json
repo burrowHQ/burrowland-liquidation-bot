@@ -1,0 +1,9 @@
+{
+    "accountId": "SIGNER_NEAR_ACCOUNT_ID",
+    "encodePrivateKey": "SIGNER_ENCODE_PRIVATE_KEY",
+    "nodeUrl": "https://rpc.mainnet.near.org",
+    "minProfit": "1.0",
+    "minDiscount": "0.05",
+    "maxLiquidationAmount": "20000",
+    "loopInterval": "30000"
+}

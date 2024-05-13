@@ -69,6 +69,27 @@ function decryptAES(ciphertext, key) {
   return bytes.toString(CryptoJS.enc.Utf8);
 }
 
+const printOutcome = (outcome) => {
+  let failureMessages = []
+  let is_success = Object.values(outcome['receipts_outcome']).reduce((is_success, receipt) => {
+    if (receipt["outcome"]["status"].hasOwnProperty("Failure")) {
+      failureMessages.push(receipt["outcome"]["status"])
+      return false;
+    }
+    return is_success;
+  }, true);
+  if (is_success) {
+    console.log("");
+    console.log("success tx: ", outcome["transaction"]["hash"]);
+    console.log("");
+  } else {
+    console.log("");
+    console.log("failed: ");
+    console.log(JSON.stringify(failureMessages, undefined, 2));
+    console.log("");
+  }
+}
+
 module.exports = {
   bigMin,
   keysToCamel,
@@ -79,5 +100,6 @@ module.exports = {
   saveJson,
   sleep,
   PYTH_STALENESS_THRESHOLD,
-  decryptAES
+  decryptAES,
+  printOutcome
 };

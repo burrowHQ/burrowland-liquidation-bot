@@ -1,4 +1,6 @@
 const Big = require("big.js");
+const fs = require('fs');
+
 module.exports = {
   getConfig: (env) => {
     const config = (() => {
@@ -17,78 +19,7 @@ module.exports = {
             burrowContractId: "contract.main.burrow.near",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.near",
-            loopInterval: process.env.LOOP_INTERVAL || 5000,
-            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
-          };
-        case "development":
-          return {
-            networkId: "testnet",
-            nodeUrl: process.env.NODE_URL || "https://rpc.testnet.near.org",
-            walletUrl: "https://wallet.testnet.near.org",
-            helperUrl: "https://helper.testnet.near.org",
-            explorerUrl: "https://explorer.testnet.near.org",
-            refFinanceContractId: "dev-1704418570028-31304846290234",
-            // refFinanceContractId: "ref-finance-101.testnet",
-            priceOracleContractId: "dev-1700791085144-86637101874849",
-            pythOracleContractId: "pyth-oracle.testnet",
-            burrowContractId: "dev-1707132736890-13749887598327",
-            accountId: process.env.NEAR_ACCOUNT_ID,
-            wrapNearAccountId: "wrap.testnet",
-            router: {
-              // "usdt.fakes.testnet&dai.fakes.testnet": {
-              //   dex_id: "dev-1707134085683-95275841586061",
-              //   dex_type: 1,
-              //   pool_id: 0
-              // },
-              // "dai.fakes.testnet&usdt.fakes.testnet": {
-              //   dex_id: "dev-1707134085683-95275841586061",
-              //   dex_type: 1,
-              //   pool_id: 0
-              // },
-              "usdt.fakes.testnet&dai.fakes.testnet": {
-                dex_id: "dev-1707136746796-79997967772528",
-                dex_type: 2,
-                pool_ids: ["dai.fakes.testnet|usdt.fakes.testnet|100"]
-              },
-              "dai.fakes.testnet&usdt.fakes.testnet": {
-                dex_id: "dev-1707136746796-79997967772528",
-                dex_type: 2,
-                pool_ids: ["dai.fakes.testnet|usdt.fakes.testnet|100"]
-              },
-            },
-            loopInterval: process.env.LOOP_INTERVAL || 5000,
-            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
-          };
-        case "testnet_dev":
-          return {
-            networkId: "testnet",
-            nodeUrl: process.env.NODE_URL || "https://rpc.testnet.near.org",
-            walletUrl: "https://wallet.testnet.near.org",
-            helperUrl: "https://helper.testnet.near.org",
-            explorerUrl: "https://explorer.testnet.near.org",
-            refFinanceContractId: "exchange.ref-dev.testnet",
-            priceOracleContractId: "mock-priceoracle.testnet",
-            pythOracleContractId: "pyth-oracle.testnet",
-            burrowContractId: "contract.1689937928.burrow.testnet",
-            accountId: process.env.NEAR_ACCOUNT_ID,
-            wrapNearAccountId: "wrap.testnet",
-            loopInterval: process.env.LOOP_INTERVAL || 5000,
-            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
-          };
-        case "testnet_public":
-          return {
-            networkId: "testnet",
-            nodeUrl: process.env.NODE_URL || "https://rpc.testnet.near.org",
-            walletUrl: "https://wallet.testnet.near.org",
-            helperUrl: "https://helper.testnet.near.org",
-            explorerUrl: "https://explorer.testnet.near.org",
-            refFinanceContractId: "ref-finance-101.testnet",
-            priceOracleContractId: "mock-priceoracle.testnet",
-            pythOracleContractId: "pyth-oracle.testnet",
-            burrowContractId: "contract.burrow.testnet",
-            accountId: process.env.NEAR_ACCOUNT_ID,
-            wrapNearAccountId: "wrap.testnet",
-            loopInterval: process.env.LOOP_INTERVAL || 5000,
+            loopInterval: process.env.LOOP_INTERVAL || 30000,
             encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
           };
         default:
@@ -98,7 +29,7 @@ module.exports = {
       }
     })();
     config.minProfit = Big(process.env.MIN_PROFIT || "1.0");
-    config.minDiscount = Big(process.env.MIN_DISCOUNT || "0.025");
+    config.minDiscount = Big(process.env.MIN_DISCOUNT || "0.05");
     config.showWhales = !!process.env.SHOW_WHALES;
     config.minSwapAmount = Big(process.env.MIN_SWAP_AMOUNT || "1");
     config.minRepayAmount = Big(process.env.MIN_REPAY_AMOUNT || "0.5");
@@ -109,6 +40,17 @@ module.exports = {
     config.maxWithdrawCount = parseInt(process.env.MAX_WITHDRAW_COUNT || "5");
     config.forceClose = !!process.env.FORCE_CLOSE;
     config.marginPosition = !!process.env.MARGIN_POSITION;
-    return config;
+
+    const customConfigData = fs.readFileSync('/app/config.json', 'utf8');
+    const customConfig = JSON.parse(customConfigData);
+    return Object.assign(config, {
+      accountId: customConfig.accountId,
+      encodePrivateKey: customConfig.encodePrivateKey,
+      nodeUrl: customConfig.nodeUrl,
+      minProfit: Big(customConfig.minProfit),
+      minDiscount: Big(customConfig.minDiscount),
+      maxLiquidationAmount: Big(customConfig.maxLiquidationAmount),
+      loopInterval: customConfig.loopInterval
+    });
   },
 };

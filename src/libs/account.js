@@ -338,7 +338,7 @@ const computeLiquidation = (
   console.log(
     `Maybe liq ${account.accountId} -> position ${account.position} -> discount ${origDiscount
       .mul(100)
-      .toFixed(2)}% -> profit $${totalPricedProfit.toFixed(3)}`
+      .toFixed(2)}% -> profit $${totalPricedProfit.toFixed()}`
   );
 
   // Adjusting collateralAssets amounts.

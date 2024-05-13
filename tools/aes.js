@@ -10,7 +10,7 @@ function decryptAES(ciphertext, key) {
 }
 
 const key = "YOUR_PASSWORD";
-const plaintext = "YOUR_PRIVATE_KEY";
+const plaintext = "YOUR_PRIVATE_KEY(ed25519:xxxxx)";
 const ciphertext = encryptAES(plaintext, key);
 const decryptedText = decryptAES(ciphertext, key);
 
