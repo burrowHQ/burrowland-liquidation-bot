@@ -12,9 +12,11 @@ function getPassword() {
   });
 }
 
+const tokenRegisterAlreadyCheckList = []
+
 initNear(true, getPassword()).then((nearObject) => {
   const executeTokenRegisterAsyncOperation = () => {
-    tokenRegisterDocker(nearObject).then(() => {
+    tokenRegisterDocker(nearObject, tokenRegisterAlreadyCheckList).then(() => {
       setTimeout(executeTokenRegisterAsyncOperation, nearObject.NearConfig.loopInterval);
     }).catch(error => {
       console.error('Token register failed:', error);

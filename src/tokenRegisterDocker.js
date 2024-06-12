@@ -1,7 +1,7 @@
 const Big = require("big.js");
 
 module.exports = {
-  main: async (nearObjects) => {
+  main: async (nearObjects, tokenRegisterAlreadyCheckList) => {
       console.log(new Date(), "Token register check started")
       const { tokenContract, burrowContract, NearConfig } = nearObjects;
       const rawAssets = await burrowContract.get_assets_paged();
@@ -12,7 +12,7 @@ module.exports = {
 
       for (let i = 0; i < assetIds.length; ++i) {
         const tokenId = assetIds[i];
-        if (tokenId.substring(0, 14) == "shadow_ref_v1-") {
+        if (tokenId.substring(0, 14) == "shadow_ref_v1-" || tokenRegisterAlreadyCheckList.includes(tokenId)) {
           continue;
         }
         const token = tokenContract(tokenId);
@@ -27,6 +27,7 @@ module.exports = {
             Big(10).pow(23).toFixed(0)
           );
         }
+        tokenRegisterAlreadyCheckList.push(tokenId);
       }
       console.log(new Date(), "Token register check completed")
     }
