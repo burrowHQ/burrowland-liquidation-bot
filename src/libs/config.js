@@ -37,11 +37,11 @@ module.exports = {
     config.maxLiquidationAmount = Big(
       process.env.MAX_LIQUIDATION_AMOUNT || "20000"
     );
-    config.maxWithdrawCount = parseInt(process.env.MAX_WITHDRAW_COUNT || "0");
+    config.maxWithdrawCount = parseInt(process.env.MAX_WITHDRAW_COUNT || "5");
     config.forceClose = !!process.env.FORCE_CLOSE;
     config.marginPosition = !!process.env.MARGIN_POSITION;
 
-    const customConfigData = fs.readFileSync('/app/config.json', 'utf8');
+    const customConfigData = fs.readFileSync('./config.json', 'utf8');
     const customConfig = JSON.parse(customConfigData);
     return Object.assign(config, {
       accountId: customConfig.accountId,
@@ -49,6 +49,8 @@ module.exports = {
       nodeUrl: customConfig.nodeUrl,
       minProfit: Big(customConfig.minProfit),
       minDiscount: Big(customConfig.minDiscount),
+      minRepayAmount: Big(customConfig.minRepayAmount),
+      minSwapAmount: Big(customConfig.minSwapAmount),
       loopInterval: customConfig.loopInterval
     });
   },

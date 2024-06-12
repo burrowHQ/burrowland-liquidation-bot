@@ -23,6 +23,8 @@ Create the JSON configuration file as follows:
     "nodeUrl": "https://rpc.mainnet.near.org",
     "minProfit": "1.0",
     "minDiscount": "0.05",
+    "minRepayAmount": "0.5",
+    "minSwapAmount": "1",
     "loopInterval": "30000"
 }
 ```
@@ -41,19 +43,26 @@ The meanings of all configuration items are as follows:
 - hf = adjustedCollateralValue / adjustedBorrowedValue
 - discount = 0.5 * (1 - hf)
 
+`minRepayAmount`: When the debt value exceeds the minRepayAmount and the user has this token in their wallet, it will automatically perform the repay operation for the user, default: 0.5(U)
+
+`minSwapAmount`: default: 1(U).Control three scenarios:
+- When the user has assets in the supplied section of the burrow contract and the value is greater than minSwapAmount, it will automatically perform a withdraw action to transfer the assets to the user's wallet.
+- When the user holds non-wrap.near assets supported by the burrow contract in their wallet and the value exceeds minSwapAmount, it will automatically swap them to wrap.near.
+- When the user's debt value in the burrow contract exceeds minSwapAmount, it will automatically use the wrap.near in the user's wallet to purchase the debt assets and perform the repay operation. Since interest is still generated during this process, a small amount of debt will still remain after the repay operation.
+
 `loopInterval`: The time interval for executing liquidations in a loop, default: 30000(ms)
 
 ## Run Command
 
 Get the docker image.
 ```shell
-docker pull refburrow/burrowland-liquidation-bot:v1.0.0
+docker pull refburrow/burrowland-liquidation-bot:v1.1.0
 ```
 
 Then, run the container:
 
 ```shell
-docker run -v ${YOUR_CONFIG_JSON_FILE_PATH}:/app/config.json -it refburrow/burrowland-liquidation-bot:v1.0.0
+docker run -v ${YOUR_CONFIG_JSON_FILE_PATH}:/app/config.json -it refburrow/burrowland-liquidation-bot:v1.1.0
 ```
 
 When you see the command prompt `Please enter your password:`, please input `YOUR_PASSWORD` and press Enter.
@@ -70,6 +79,12 @@ Accounts with health less than 100 and discount greater than or equal to 0.05: [
 Maybe liq user1.near -> position REGULAR -> discount 6.13% -> profit $0.022782841070313249014012405
 Maybe liq user2.near -> position REGULAR -> discount 5.82% -> profit $0.105884178804873633297812221
 2024-05-10T07:09:41.963Z Liquidation check completed
+
+2024-05-10T07:09:41.141Z Rebalance check started
+2024-05-10T07:09:41.963Z Rebalance check completed
+
+2024-05-10T07:09:41.141Z Token register check started
+2024-05-10T07:09:41.963Z Token register check completed
 ```
 
 When you see a log starting with `success tx:`, it indicates that a liquidation has been successfully executed. You can copy the transaction hash from the log and query for details on the NEAR Explorer.
