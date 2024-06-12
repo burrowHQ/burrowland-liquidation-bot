@@ -13,6 +13,8 @@ const { Near } = require("near-api-js");
 const fs = require("fs");
 const { exec } = require('child_process')
 const request = require("request")
+const liquidationlog_model = require('./models/liquidation_log');
+const seq = require('./models/db');
 
 const FILENAME = "liquidated_list.json";
 
@@ -202,14 +204,34 @@ module.exports = {
       if (bestLiquidation) {
         console.log("Executing liquidation");
         const msg = JSON.stringify(bestLiquidation.actions);
-        await priceOracleContract.oracle_call(
-          {
-            receiver_id: NearConfig.burrowContractId,
-            msg,
-          },
-          Big(10).pow(12).mul(300).toFixed(0),
-          "1"
-        );
+        try {
+           await priceOracleContract.oracle_call(
+             {
+               receiver_id: NearConfig.burrowContractId,
+               msg,
+             },
+             Big(10).pow(12).mul(300).toFixed(0),
+             "1"
+           );
+           
+          for (const action of bestLiquidation.actions.Execute.actions) {
+            if(action.hasOwnProperty("Liquidate")){
+              await liquidationlog_model.create({
+                account_id: action["Liquidate"].account_id,
+                healthFactor_before: bestLiquidation.origHealth.toFixed(6),
+                healthFactor_after: bestLiquidation.health.toFixed(6),
+                liquidation_type: "liquidate",
+                RepaidAssets: action["Liquidate"].in_assets,
+                LiquidatedAssets: action["Liquidate"].out_assets,
+                isRead: false,
+                isDeleted: false
+              });
+            }
+          }
+        }
+        catch (Error) {
+          console.log("Error: ",Error)
+        }
       }
     }
     if (forceClose) {
@@ -228,15 +250,31 @@ module.exports = {
               ],
             },
           });
-          await priceOracleContract.oracle_call(
-            {
-              receiver_id: NearConfig.burrowContractId,
-              msg,
-            },
-            Big(10).pow(12).mul(300).toFixed(0),
-            "1"
-          );
-
+          
+          try {
+             await priceOracleContract.oracle_call(
+               {
+                 receiver_id: NearConfig.burrowContractId,
+                 msg,
+               },
+               Big(10).pow(12).mul(300).toFixed(0),
+               "1"
+             );
+             
+             await liquidationlog_model.create({
+               account_id: account.accountId,
+               healthFactor_before: account.healthFactor.toFixed(6),
+               healthFactor_after: "100000",
+               liquidation_type: "ForceClose",
+               RepaidAssets: [],
+               LiquidatedAssets: [],
+               isRead: false,
+               isDeleted: false
+             });
+          }
+          catch (Error) {
+             console.log("Error: ",Error)
+          }
           return;
         }
       }

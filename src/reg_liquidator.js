@@ -15,6 +15,7 @@ async function main(nearObjects) {
   // try to read liquidator account from burrowland
   const burrowAccount = await burrowContract.get_account({account_id: NearConfig.accountId  })
   if(burrowAccount == null){
+      console.log(`Paying storage for burrowContract`);
       await burrowContract.storage_deposit({
           account_id: NearConfig.accountId,
           registration_only: true,
@@ -23,8 +24,9 @@ async function main(nearObjects) {
         Big(10).pow(24).toFixed(0)
       )
   }
-
-  console.log(JSON.stringify(burrowAccount, null, 2));
+  else {
+    console.log(JSON.stringify(burrowAccount, null, 2));
+  }
 
   // account in ref exchange
   await refFinanceContract.storage_deposit({

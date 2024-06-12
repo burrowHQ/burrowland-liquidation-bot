@@ -12,7 +12,13 @@
     "near-api-js": "^0.38.0",
     "node-fetch": "^2.6.1",
     "big.js": "^6.0.3",
-    "request": "^2.88.2"
+    "request": "^2.88.2",
+    "pg": "^8.7.1",
+    "pg-hstore": "^2.3.4",
+    "pg-native": "^3.0.0",
+    "react-ga": "^3.3.0",
+    "sequelize": "^6.6.5",
+    "sequelize-cli": "^6.3.0"
   },
   "devDependencies": {
     "prettier": "^2.2.1"
