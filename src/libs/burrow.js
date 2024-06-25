@@ -1,5 +1,5 @@
 const Big = require("big.js");
-const { keysToCamel, PYTH_STALENESS_THRESHOLD } = require("./utils");
+const { keysToCamel, logToFile, PYTH_STALENESS_THRESHOLD } = require("./utils");
 const { parseAsset } = require("./asset");
 const { parsePriceData } = require("./priceData");
 const { main: check_margin_position } = require("./margin");
@@ -341,7 +341,7 @@ module.exports = {
             return is_success;
           }, true);
           if (is_success) {
-            console.log("success tx: ", outcome["transaction"]["hash"]);
+            logToFile("./logs/liquidation_success.log", new Date() + " success tx: " + outcome["transaction"]["hash"]);
             for (const action of bestLiquidation.actions) {
               if(action.hasOwnProperty("Liquidate")){
                 await liquidationlog_model.create({
@@ -389,7 +389,7 @@ module.exports = {
               return is_success;
             }, true);
             if (is_success) {
-              console.log("success tx: ", outcome["transaction"]["hash"]);
+              logToFile("./logs/force_close_success.log", new Date() + " success tx: " + outcome["transaction"]["hash"]);
               await liquidationlog_model.create({
                 account_id: accountDetail.accountId,
                 healthFactor_before: accountDetail.healthFactor.toFixed(6),

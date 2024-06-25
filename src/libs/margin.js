@@ -104,7 +104,7 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
   return a;
 }
 
-const printOutcome = (outcome) => {
+const printOutcome = (filePath, outcome) => {
   let failureMessages = []
   let is_success = Object.values(outcome['receipts_outcome']).reduce((is_success, receipt) => {
     if (receipt["outcome"]["status"].hasOwnProperty("Failure")) {
@@ -114,6 +114,7 @@ const printOutcome = (outcome) => {
     return is_success;
   }, true);
   if (is_success) {
+    logToFile(filePath, new Date() + " success tx: " + outcome["transaction"]["hash"]);
     console.log("");
     console.log("success tx: ", outcome["transaction"]["hash"]);
     console.log("");
@@ -210,7 +211,7 @@ module.exports = {
           const outcome = burrow_config.enable_price_oracle ? 
             await margin_execute_with_price_oracle(account, NearConfig, liquidationAccounts[0].actions) :
             await margin_execute_with_pyth_oracle(account, NearConfig, liquidationAccounts[0].actions);
-          printOutcome(outcome)
+          printOutcome("./logs/margin_liquidation_success.log", outcome)
         }
       }
       catch (Error) {
@@ -225,7 +226,7 @@ module.exports = {
         const outcome = burrow_config.enable_price_oracle ? 
           await margin_execute_with_price_oracle(account, NearConfig, forcecloseAccounts[0].actions) :
           await margin_execute_with_pyth_oracle(account, NearConfig, forcecloseAccounts[0].actions);
-        printOutcome(outcome)
+        printOutcome("./logs/margin_force_close_success.log", outcome)
       }
       catch (Error) {
          console.log("Error: ",Error)

@@ -1,5 +1,6 @@
 const Big = require("big.js");
 const fs = require("fs");
+const path = require('path');
 const CryptoJS = require("crypto-js");
 
 const PYTH_STALENESS_THRESHOLD = 60;
@@ -69,6 +70,25 @@ function decryptAES(ciphertext, key) {
   return bytes.toString(CryptoJS.enc.Utf8);
 }
 
+function logToFile(filePath, logContent) {
+  // Check if the file exists
+  if (fs.existsSync(filePath)) {
+    // Append to the existing file
+    fs.appendFile(filePath, '\n' + logContent + '\n', (err) => {
+      if (err) {
+        console.error(`Error appending to file: ${err}`);
+      }
+    });
+  } else {
+    // Create the file and write the content
+    fs.writeFile(filePath, logContent + '\n', (err) => {
+      if (err) {
+        console.error(`Error writing to file: ${err}`);
+      }
+    });
+  }
+}
+
 module.exports = {
   bigMin,
   keysToCamel,
@@ -79,5 +99,6 @@ module.exports = {
   saveJson,
   sleep,
   PYTH_STALENESS_THRESHOLD,
-  decryptAES
+  decryptAES,
+  logToFile
 };
