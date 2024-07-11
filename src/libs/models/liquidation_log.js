@@ -15,6 +15,10 @@ const LiquidationLog = seq.define('BurrowLiquidationLog', {
         type: DataTypes.STRING,
         allowNull: false
     },
+    position: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
     healthFactor_before: {
         type: DataTypes.STRING,
         allowNull: false

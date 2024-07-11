@@ -345,6 +345,7 @@ module.exports = {
               if(action.hasOwnProperty("Liquidate")){
                 await liquidationlog_model.create({
                   account_id: action["Liquidate"].account_id,
+                  position: action['Liquidate']['position'],
                   healthFactor_before: bestLiquidation.origHealth.toFixed(6),
                   healthFactor_after: bestLiquidation.health.toFixed(6),
                   liquidation_type: "liquidate",
@@ -391,6 +392,7 @@ module.exports = {
               console.log("success tx: ", outcome["transaction"]["hash"]);
               await liquidationlog_model.create({
                 account_id: accountDetail.accountId,
+                position: accountDetail.position,
                 healthFactor_before: accountDetail.healthFactor.toFixed(6),
                 healthFactor_after: "100000",
                 liquidation_type: "ForceClose",
