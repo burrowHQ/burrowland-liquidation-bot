@@ -98,18 +98,33 @@ module.exports = {
     });
 
     const sort_by_health_factor_list = []
+    const sort_by_hf_csv_list = []
     for (const a of accounts) {
       sort_by_health_factor_list.push(
-        `
-          ${a.accountId.padEnd(64)} ${a.position.padEnd(20)} 
-          -> healthFactor: ${a.healthFactor.mul(100).toFixed(2).padEnd(6)}% 
-          -> collateralSum: ${a.collateralSum.toFixed(2).padEnd(20)}
-          -> borrowedSum: ${a.borrowedSum.toFixed(2).padEnd(20)}
-          -> gapSum: ${(a.collateralSum - a.borrowedSum).toFixed(2).padEnd(20)}
-          -> adjustedCollateralSum: ${a.adjustedCollateralSum.toFixed(2).padEnd(20)}
-          -> adjustedBorrowedSum: ${a.adjustedBorrowedSum.toFixed(2).padEnd(20)}
-          -> adjustedGapSum: ${(a.adjustedCollateralSum - a.adjustedBorrowedSum).toFixed(2).padEnd(20)}
-        `
+        {
+          accountId: `${a.accountId}`,
+          type: `${a.position}`,
+          healthFactor: `${a.healthFactor.mul(100).toFixed(2)}%`,
+          collateralSum: `${a.collateralSum.toFixed(2)}`,
+          borrowedSum: `${a.borrowedSum.toFixed(2)}`,
+          gapSum: `${(a.collateralSum - a.borrowedSum).toFixed(2)}`,
+          adjustedCollateralSum: `${a.adjustedCollateralSum.toFixed(2)}`,
+          adjustedBorrowedSum: `${a.adjustedBorrowedSum.toFixed(2)}`,
+          adjustedGapSum: `${(a.adjustedCollateralSum - a.adjustedBorrowedSum).toFixed(2)}`
+        }
+        // `
+        //   ${a.accountId.padEnd(64)} ${a.position.padEnd(20)} 
+        //   -> healthFactor: ${a.healthFactor.mul(100).toFixed(2).padEnd(6)}% 
+        //   -> collateralSum: ${a.collateralSum.toFixed(2).padEnd(20)}
+        //   -> borrowedSum: ${a.borrowedSum.toFixed(2).padEnd(20)}
+        //   -> gapSum: ${(a.collateralSum - a.borrowedSum).toFixed(2).padEnd(20)}
+        //   -> adjustedCollateralSum: ${a.adjustedCollateralSum.toFixed(2).padEnd(20)}
+        //   -> adjustedBorrowedSum: ${a.adjustedBorrowedSum.toFixed(2).padEnd(20)}
+        //   -> adjustedGapSum: ${(a.adjustedCollateralSum - a.adjustedBorrowedSum).toFixed(2).padEnd(20)}
+        // `
+      )
+      sort_by_hf_csv_list.push(
+        `${a.healthFactor.mul(100).toFixed(2).padStart(6)}%, ${a.borrowedSum.toFixed(2).padStart(15)}, ${a.collateralSum.toFixed(2).padStart(15)}, ${a.accountId.padStart(64)}`
       )
     }
     const sort_by_health_factor_str = JSON.stringify(sort_by_health_factor_list, undefined, 2);
@@ -118,6 +133,13 @@ module.exports = {
         console.log('Save sort_by_health_factor.json failed: ', err);
       } else {
         console.log(`File sort_by_health_factor.json saved`);
+      }
+    });
+    fs.writeFile("./data/sort_by_health_factor.csv", sort_by_hf_csv_list.join("\n"), function (err) {
+      if (err) {
+        console.log('Save sort_by_health_factor.csv failed: ', err);
+      } else {
+        console.log(`File sort_by_health_factor.csv saved`);
       }
     });
 
