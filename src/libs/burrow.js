@@ -21,6 +21,16 @@ const FILENAME = "liquidated_list.json";
 
 Big.DP = 27;
 
+const promiseWithTimeout = (promise, timeout) => {
+  let timeoutPromise = new Promise((resolve, reject) => {
+    setTimeout(() => {
+      reject(new Error('Promise timed out'));
+    }, timeout);
+  });
+ 
+  return Promise.race([promise, timeoutPromise]);
+}
+
 const calcRealPricedProfit = (actions, assets, prices, lp_token_infos) => {
   for (const action of actions) {
     if(action.hasOwnProperty("Liquidate")){
@@ -163,16 +173,23 @@ module.exports = {
     const promises = [];
     for (let i = 0; i < numAccounts; i += limit) {
       promises.push(
-        burrowContract.get_accounts_paged({ from_index: i, limit })
+        promiseWithTimeout(burrowContract.get_accounts_paged({ from_index: i, limit }), 20000)
       );
     }
-    const accounts = (await Promise.all(promises))
-      .flat()
-      .map((a) => parseAccount(a))
-      .flat()
-      .map((a) => processAccount(a, assets, prices, lp_token_infos))
-      .filter((a) => !!a.healthFactor);
 
+    let accounts;
+    try {
+      accounts = (await Promise.all(promises))
+        .flat()
+        .map((a) => parseAccount(a))
+        .flat()
+        .map((a) => processAccount(a, assets, prices, lp_token_infos))
+        .filter((a) => !!a.healthFactor);
+    } catch (error) {
+      console.error('error:', error)
+      return;
+    }
+    
     accounts.sort((a, b) => {
       return a.healthFactor.cmp(b.healthFactor);
     });
