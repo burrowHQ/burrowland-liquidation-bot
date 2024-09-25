@@ -98,7 +98,8 @@ module.exports = {
           "get_margin_accounts_paged",
           "get_num_margin_accounts",
           "get_all_token_pyth_infos",
-          "get_margin_config"
+          "get_margin_config",
+          "get_account_all_positions"
         ],
         changeMethods: ["storage_deposit", "execute", "margin_execute"],
       }

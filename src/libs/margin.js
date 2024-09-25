@@ -132,28 +132,28 @@ const margin_execute_with_price_oracle = async (account, NearConfig, actions) =>
       actions
     }
   });
-  return await account.functionCall(
-    NearConfig.priceOracleContractId,
-    "oracle_call",
-    {
-      receiver_id: NearConfig.burrowContractId,
-      msg,
+  return await account.functionCall({
+    "contractId": NearConfig.priceOracleContractId,
+    "methodName": "oracle_call",
+    "args": {
+      "receiver_id": NearConfig.burrowContractId,
+      "msg": msg,
     },
-    Big(10).pow(12).mul(300).toFixed(0),
-    "1",
-  );
+    "gas": Big(10).pow(12).mul(300).toFixed(0),
+    "attachedDeposit": "1",
+  });
 }
 
 const margin_execute_with_pyth_oracle = async (account, NearConfig, actions) => {
-  return await account.functionCall(
-    NearConfig.burrowContractId,
-    "margin_execute_with_pyth",
-    {
+  return await account.functionCall({
+    "contractId": NearConfig.burrowContractId,
+    "methodName": "margin_execute_with_pyth",
+    "args": {
       actions
     },
-    Big(10).pow(12).mul(300).toFixed(0),
-    "1",
-  );
+    "gas": Big(10).pow(12).mul(300).toFixed(0),
+    "attachedDeposit": "1",
+  });
     
 }
 

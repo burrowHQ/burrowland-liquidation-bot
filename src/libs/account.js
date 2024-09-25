@@ -20,6 +20,44 @@ const parseAccountAssetDetailed = (a) => {
   };
 };
 
+const toAccount = (a) => {
+  const supplied = a['supplied'].reduce((obj, item) => {
+    obj[item.token_id] = item.shares;
+    return obj
+  }, {});
+  const positions = Object.entries(a['positions']).reduce((obj, [position, positionDetail]) => {
+    const positionType = position == "REGULAR" ? "RegularPosition" : "LPTokenPosition";
+    const positionContent = position == "REGULAR" ? {
+      [positionType]: {
+        collateral: positionDetail.collateral.reduce((obj, item) => {
+          obj[item.token_id] = item.shares;
+          return obj
+        }, {}),
+        borrowed: positionDetail.borrowed.reduce((obj, item) => {
+          obj[item.token_id] = item.shares;
+          return obj
+        }, {})
+      }
+    } : {
+      [positionType]: {
+        lpt_id: position,
+        collateral: positionDetail.collateral[0].shares,
+        borrowed: positionDetail.borrowed.reduce((obj, item) => {
+          obj[item.token_id] = item.shares;
+          return obj
+        }, {})
+      }
+    }
+    obj[position] = positionContent;
+    return obj;
+  }, {})
+  return {
+    account_id: a.account_id,
+    supplied,
+    positions,
+  }
+};
+
 const parseAccount = (a) => {
   return Object.entries(a.positions).reduce((allPositions, [position, assetsInfo]) => {
     const position_type = position == "REGULAR" ? "RegularPosition" : "LPTokenPosition";
@@ -394,6 +432,7 @@ const computeLiquidation = (
 };
 
 module.exports = {
+  toAccount,
   parseAccount,
   parseAccountDetailed,
   processAccount,

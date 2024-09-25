@@ -18,7 +18,9 @@ module.exports = {
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.near",
             loopInterval: process.env.LOOP_INTERVAL || 5000,
-            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
+            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY,
+            dataServiceUrl: process.env.DATA_SERVICE_URL,
+            topN: process.env.TOPN || 50
           };
         case "development":
           return {
@@ -57,7 +59,9 @@ module.exports = {
               },
             },
             loopInterval: process.env.LOOP_INTERVAL || 5000,
-            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
+            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY,
+            dataServiceUrl: process.env.DATA_SERVICE_URL,
+            topN: process.env.TOPN || 50
           };
         case "testnet_dev":
           return {
@@ -73,7 +77,9 @@ module.exports = {
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
             loopInterval: process.env.LOOP_INTERVAL || 5000,
-            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
+            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY,
+            dataServiceUrl: process.env.DATA_SERVICE_URL,
+            topN: process.env.TOPN || 50
           };
         case "testnet_public":
           return {
@@ -89,7 +95,9 @@ module.exports = {
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
             loopInterval: process.env.LOOP_INTERVAL || 5000,
-            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY
+            encodePrivateKey: process.env.ENCODE_PRIVATE_KEY,
+            dataServiceUrl: process.env.DATA_SERVICE_URL,
+            topN: process.env.TOPN || 50
           };
         default:
           throw Error(
