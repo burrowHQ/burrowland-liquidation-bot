@@ -8,11 +8,8 @@ export MIN_PROFIT=1
 export MIN_DISCOUNT=0.05
 export MAX_LIQUIDATION_AMOUNT=20000
 export ENCODE_PRIVATE_KEY=$YOUR_ENCODE_PRIVATE_KEY
-
-export DB_HOST=127.0.0.1
-export DB_NAME=refdb
-export DB_USER=postgres
-export DB_PASSWORD=yourpassword
+export DATA_SERVICE_URL=$YOUR_DATA_SERVICE_URL
+export TOPN=50
 
 cd $(dirname "$0")
 DATE=$(date "+%Y_%m_%d")

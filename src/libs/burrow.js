@@ -150,7 +150,7 @@ module.exports = {
         const timeDifference = Math.floor((new Date().getTime() - new Date(responseData.timestamp).getTime()) / 1000);
         if (timeDifference <= 60) {
           // const allAccounts = responseData.data;
-          const allAccountIds = [...new Set(responseData.data.map((item) => item.account_id))];
+          const allAccountIds = [...new Set(responseData.data.slice(0, NearConfig.topN).map((item) => item.account_id))];
 
           const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
           const assets = rawAssets.reduce((assets, [assetId, asset]) => {
@@ -201,7 +201,6 @@ module.exports = {
           accounts.sort((a, b) => {
             return a.healthFactor.cmp(b.healthFactor);
           });
-          accounts = accounts.slice(0, NearConfig.topN)
 
           if (NearConfig.showWhales) {
             console.log(
