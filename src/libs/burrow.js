@@ -149,9 +149,6 @@ module.exports = {
         const responseData = JSON.parse(response.data.data.values)
         const timeDifference = Math.floor((new Date().getTime() - new Date(responseData.timestamp).getTime()) / 1000);
         if (timeDifference <= 60) {
-          // const allAccounts = responseData.data;
-          const allAccountIds = [...new Set(responseData.data.slice(0, NearConfig.topN).map((item) => item.account_id))];
-
           const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
           const assets = rawAssets.reduce((assets, [assetId, asset]) => {
             assets[assetId] = parseAsset(asset);
@@ -170,6 +167,18 @@ module.exports = {
           const burrow_config = await burrowContract.get_config();
           const prices = burrow_config.enable_price_oracle ? await getPriceOralcePrices(priceOracleContract, assets) : await getPythPrices(account, burrowContract, pythOracleContract);
 
+          const allAccounts = responseData.data
+            .map((a) => parseAccount(a))
+            .flat()
+            .map((a) => processAccount(a, assets, prices, lp_token_infos))
+            .filter((a) => !!a.healthFactor)
+            .filter(a => a.healthFactor.lt(1));
+          
+          allAccounts.sort((a, b) => {
+            return a.healthFactor.cmp(b.healthFactor);
+          }); 
+
+          const allAccountIds = [...new Set(allAccounts.slice(0, NearConfig.topN).map((item) => item.accountId))];
           const promises = [];
           for (const accountId of allAccountIds) {
             promises.push(
@@ -192,12 +201,6 @@ module.exports = {
             return;
           }
 
-          // const accounts = allAccounts
-          //   .map((a) => parseAccount(a))
-          //   .flat()
-          //   .map((a) => processAccount(a, assets, prices, lp_token_infos))
-          //   .filter((a) => !!a.healthFactor);
-
           accounts.sort((a, b) => {
             return a.healthFactor.cmp(b.healthFactor);
           });
@@ -219,10 +222,6 @@ module.exports = {
           const accountsWithDebt = accounts.filter((a) =>
             a.discount.gte(NearConfig.minDiscount)
           );
-
-          accountsWithDebt.sort((a, b) => {
-            return b.discount.cmp(a.discount);
-          });
 
           console.log(`Accounts with health less than 100 and discount greater than or equal to ${NearConfig.minDiscount}:`,
             accountsWithDebt
