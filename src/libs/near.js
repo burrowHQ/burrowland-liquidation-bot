@@ -13,6 +13,7 @@ module.exports = {
 
     let near;
     let account;
+    let connection;
 
     if (loadAccount) {
       if (NearConfig.encodePrivateKey) {
@@ -24,7 +25,7 @@ module.exports = {
         const keyPair = nearAPI.KeyPair.fromString(privateKey);
         const keyStore = new nearAPI.keyStores.InMemoryKeyStore();
         keyStore.setKey(NearConfig.networkId, NearConfig.accountId, keyPair);
-        const connection = nearAPI.Connection.fromConfig({
+        connection = nearAPI.Connection.fromConfig({
           networkId: NearConfig.networkId,
           provider: { type: "JsonRpcProvider", args: { url: NearConfig.nodeUrl } },
           signer: { type: "InMemorySigner", keyStore },
@@ -48,7 +49,7 @@ module.exports = {
     }
 
     const tokenContract = (tokenAccountId) =>
-      new nearAPI.Contract(account, tokenAccountId, {
+      new nearAPI.Contract(connection, tokenAccountId, {
         viewMethods: [
           "storage_balance_of",
           "ft_balance_of",
@@ -59,7 +60,7 @@ module.exports = {
       });
 
     const refFinanceContract = new nearAPI.Contract(
-      account,
+      connection,
       NearConfig.refFinanceContractId,
       {
         viewMethods: [
@@ -78,7 +79,7 @@ module.exports = {
     );
 
     const burrowContract = new nearAPI.Contract(
-      account,
+      connection,
       NearConfig.burrowContractId,
       {
         viewMethods: [
@@ -106,7 +107,7 @@ module.exports = {
     );
 
     const priceOracleContract = new nearAPI.Contract(
-      account,
+      connection,
       NearConfig.priceOracleContractId,
       {
         viewMethods: ["get_price_data"],
@@ -115,7 +116,7 @@ module.exports = {
     );
 
     const pythOracleContract = new nearAPI.Contract(
-      account,
+      connection,
       NearConfig.pythOracleContractId,
       {
         viewMethods: ["get_price", "get_price_no_older_than"],
