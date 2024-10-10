@@ -507,35 +507,38 @@ const findBestInverseReturn = (
 };
 
 async function executeSwap(nearObjects, swapInfo) {
-  const { tokenContract, NearConfig } = nearObjects;
+  const { account, tokenContract, NearConfig } = nearObjects;
   let tokenId = swapInfo.inTokenAccountId;
   let token = tokenContract(tokenId);
   return Big(
     await token.ft_transfer_call(
       {
-        receiver_id: NearConfig.refFinanceContractId,
-        amount: swapInfo.amountIn.toFixed(0),
-        msg: JSON.stringify({
-          actions: swapInfo.pools.map((pool, idx) => {
-            const tokenIn = tokenId;
-            tokenId = swapInfo.swapPath[idx + 1];
-            return {
-              pool_id: pool.index,
-              token_in: tokenIn,
-              token_out: tokenId,
-              min_amount_out:
-                tokenId === swapInfo.outTokenAccountId
-                  ? swapInfo.amountOut
-                      .mul(Big(100).sub(NearConfig.maxSlippage).div(100))
-                      .round(0, 0)
-                      .toFixed(0)
-                  : "0",
-            };
+        signerAccount: account,
+        args: {
+          receiver_id: NearConfig.refFinanceContractId,
+          amount: swapInfo.amountIn.toFixed(0),
+          msg: JSON.stringify({
+            actions: swapInfo.pools.map((pool, idx) => {
+              const tokenIn = tokenId;
+              tokenId = swapInfo.swapPath[idx + 1];
+              return {
+                pool_id: pool.index,
+                token_in: tokenIn,
+                token_out: tokenId,
+                min_amount_out:
+                  tokenId === swapInfo.outTokenAccountId
+                    ? swapInfo.amountOut
+                        .mul(Big(100).sub(NearConfig.maxSlippage).div(100))
+                        .round(0, 0)
+                        .toFixed(0)
+                    : "0",
+              };
+            }),
           }),
-        }),
-      },
-      Big(10).pow(12).mul(300).toFixed(0),
-      "1"
+        },
+        gas: Big(10).pow(12).mul(300).toFixed(0),
+        amount: "1"
+      }
     )
   );
 }

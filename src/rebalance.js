@@ -18,7 +18,7 @@ Big.DP = 27;
 
 async function main(nearObjects, rebalance) {
   console.log(new Date())
-  const { tokenContract, refFinanceContract, burrowContract, priceOracleContract, NearConfig } =
+  const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, NearConfig } =
     nearObjects;
 
   const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
@@ -75,22 +75,25 @@ async function main(nearObjects, rebalance) {
         );
         await token.ft_transfer_call(
           {
-            receiver_id: NearConfig.burrowContractId,
-            amount: amount.toFixed(0),
-            msg: JSON.stringify({
-              Execute: {
-                actions: [
-                  {
-                    Repay: {
-                      token_id: b.tokenId,
+            signerAccount: account,
+            args: {
+              receiver_id: NearConfig.burrowContractId,
+              amount: amount.toFixed(0),
+              msg: JSON.stringify({
+                Execute: {
+                  actions: [
+                    {
+                      Repay: {
+                        token_id: b.tokenId,
+                      },
                     },
-                  },
-                ],
-              },
-            }),
-          },
-          Big(10).pow(12).mul(300).toFixed(0),
-          "1"
+                  ],
+                },
+              }),
+            },
+            gas: Big(10).pow(12).mul(300).toFixed(0),
+            amount: "1"
+          }
         );
         return main(nearObjects, rebalance);
       }
@@ -110,10 +113,13 @@ async function main(nearObjects, rebalance) {
   if (repayingActions.length > 0) {
     await burrowContract.execute(
       {
-        actions: repayingActions,
-      },
-      Big(10).pow(12).mul(300).toFixed(0),
-      "1"
+        signerAccount: account,
+        args: {
+          actions: repayingActions,
+        },
+        gas: Big(10).pow(12).mul(300).toFixed(0),
+        amount: "1"
+      }
     );
     return main(nearObjects, rebalance);
   }
@@ -136,10 +142,13 @@ async function main(nearObjects, rebalance) {
   if (withdrawActions.length > 0) {
     await burrowContract.execute(
       {
-        actions: withdrawActions,
-      },
-      Big(10).pow(12).mul(300).toFixed(0),
-      "1"
+        signerAccount: account,
+        args: {
+          actions: withdrawActions,
+        },
+        gas: Big(10).pow(12).mul(300).toFixed(0),
+        amount: "1"
+      }
     );
     return main(nearObjects, rebalance);
   }
@@ -150,9 +159,12 @@ async function main(nearObjects, rebalance) {
     if (amount > 0) {
       withdrawDepositPromises.push(
         refFinanceContract.withdraw(
-          { token_id, amount },
-          Big(10).pow(12).mul(300).toFixed(0),
-          "1"
+          {
+            signerAccount: account,
+            args: { token_id, amount },
+            gas: Big(10).pow(12).mul(300).toFixed(0),
+            amount: "1"
+          }
         ),
       );
     }
@@ -198,9 +210,12 @@ async function main(nearObjects, rebalance) {
       if (Big(storageBalance?.total || 0).eq(0)) {
         console.log(`Paying storage for ${b.tokenId}`);
         await token.storage_deposit(
-          { registration_only: true },
-          Big(10).pow(12).mul(300).toFixed(0),
-          Big(10).pow(23).toFixed(0)
+          {
+            signerAccount: account,
+            args: { registration_only: true },
+            gas: Big(10).pow(12).mul(300).toFixed(0),
+            amount: Big(10).pow(23).toFixed(0)
+          }
         );
       }
       // Don't attempt buy wNEAR
@@ -216,12 +231,15 @@ async function main(nearObjects, rebalance) {
         console.log(`Depositing ${b.tokenId} amount ${balance.toFixed(0)}`);
         await token.ft_transfer_call(
           {
-            receiver_id: NearConfig.burrowContractId,
-            amount: balance.toFixed(0),
-            msg: "",
-          },
-          Big(10).pow(12).mul(300).toFixed(0),
-          "1"
+            signerAccount: account,
+            args: {
+              receiver_id: NearConfig.burrowContractId,
+              amount: balance.toFixed(0),
+              msg: "",
+            },
+            gas: Big(10).pow(12).mul(300).toFixed(0),
+            amount: "1"
+          }
         );
       }
       return main(nearObjects, rebalance);
