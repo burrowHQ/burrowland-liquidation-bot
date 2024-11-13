@@ -11,15 +11,6 @@ const {
   computeLiquidation,
   toAccount,
 } = require("./account");
-const { Near } = require("near-api-js");
-
-const fs = require("fs");
-const { exec } = require('child_process')
-const request = require("request")
-const liquidationlog_model = require('./models/liquidation_log');
-const seq = require('./models/db');
-
-const FILENAME = "liquidated_list.json";
 
 Big.DP = 27;
 
@@ -174,9 +165,15 @@ module.exports = {
             .filter((a) => !!a.healthFactor)
             .filter(a => a.healthFactor.lt(1));
           
-          allAccounts.sort((a, b) => {
-            return a.healthFactor.cmp(b.healthFactor);
-          }); 
+          if (NearConfig.minAdjustGap.gt(Big(0))) {
+            allAccounts.sort((a, b) => {
+              return b.adjustedDebt.cmp(a.adjustedDebt);
+            });
+          } else {
+            allAccounts.sort((a, b) => {
+              return a.healthFactor.cmp(b.healthFactor);
+            }); 
+          }
 
           const allAccountIds = [...new Set(allAccounts.slice(0, NearConfig.topN).map((item) => item.accountId))];
           const promises = [];
@@ -201,38 +198,35 @@ module.exports = {
             return;
           }
 
-          accounts.sort((a, b) => {
-            return a.healthFactor.cmp(b.healthFactor);
-          });
-
-          if (NearConfig.showWhales) {
-            console.log(
-              accounts
-                .sort((a, b) => b.borrowedSum.sub(a.borrowedSum).toNumber())
-                .map(
-                  (a) =>
-                    `${a.accountId} -> ${a.healthFactor
-                      .mul(100)
-                      .toFixed(2)}% -> $${a.borrowedSum.toFixed(2)}`
-                )
-                .slice(0, 20)
-            );
+          if (NearConfig.minAdjustGap.gt(Big(0))) {
+            accounts.sort((a, b) => {
+              return b.adjustedDebt.cmp(a.adjustedDebt);
+            }); 
+          } else {
+            accounts.sort((a, b) => {
+              return a.healthFactor.cmp(b.healthFactor);
+            }); 
           }
 
-          const accountsWithDebt = accounts.filter((a) =>
+          let accountsWithDebt = accounts.filter((a) =>
             a.discount.gte(NearConfig.minDiscount)
           );
 
-          console.log(`Accounts with health less than 100 and discount greater than or equal to ${NearConfig.minDiscount}:`,
+          if (NearConfig.minAdjustGap.gt(Big(0))) {
+            accountsWithDebt = accountsWithDebt.filter((a) =>
+              a.adjustedDebt.gte(NearConfig.minAdjustGap)
+            );
+          }
+          
+          console.log(`Accounts with health less than 100 and discount greater than or equal to ${NearConfig.minDiscount}% and adjustedDebt greater than or equal to ${NearConfig.minAdjustGap}$, order by ${NearConfig.minAdjustGap.gt(Big(0)) ? 'adjustedDebt' : 'discount'}:`,
             accountsWithDebt
               .filter((a) => a.healthFactor.lt(2))
               .map(
                 (a) =>
                   `${a.accountId} ${a.position}-> healthFactor: ${a.healthFactor
                     .mul(100)
-                    .toFixed(2)}% -> discount: ${a.discount.mul(100).toFixed(2)}% -> borrowedSum: $${a.borrowedSum.toFixed()}`
+                    .toFixed(2)}% -> discount: ${a.discount.mul(100).toFixed(2)}% -> borrowedSum: $${a.borrowedSum.toFixed()} -> adjustedDebt: $${a.adjustedDebt.toFixed(2)}`
               )
-              .slice(0, 20)
           );
 
           let bestLiquidation = null;

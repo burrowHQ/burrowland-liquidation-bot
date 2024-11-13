@@ -106,6 +106,7 @@ module.exports = {
       }
     })();
     config.minProfit = Big(process.env.MIN_PROFIT || "1.0");
+    config.minAdjustGap = Big(process.env.MIN_ADJUSTGAP || "0");
     config.minDiscount = Big(process.env.MIN_DISCOUNT || "0.025");
     config.showWhales = !!process.env.SHOW_WHALES;
     config.minSwapAmount = Big(process.env.MIN_SWAP_AMOUNT || "1");
