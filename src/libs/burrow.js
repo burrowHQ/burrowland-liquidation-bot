@@ -1,6 +1,6 @@
 const Big = require("big.js");
 const axios = require("axios");
-const { keysToCamel, logToFile, PYTH_STALENESS_THRESHOLD } = require("./utils");
+const { keysToCamel, PYTH_STALENESS_THRESHOLD, printOutcome } = require("./utils");
 const { parseAsset } = require("./asset");
 const { parsePriceData } = require("./priceData");
 const { main: check_margin_position } = require("./margin");
@@ -297,7 +297,7 @@ module.exports = {
                 const outcome = burrow_config.enable_price_oracle ?
                   await execute_with_price_oracle(account, NearConfig, bestLiquidation.actions) :
                   await execute_with_pyth_oracle(account, NearConfig, bestLiquidation.actions);
-                printOutcome(outcome);
+                printOutcome("./logs/liquidation_success.log", outcome);
               } catch (Error) {
                 console.log("Error: ", Error)
               }
@@ -323,7 +323,7 @@ module.exports = {
                   const outcome = burrow_config.enable_price_oracle ?
                     await execute_with_price_oracle(account, NearConfig, actions) :
                     await execute_with_pyth_oracle(account, NearConfig, actions);
-                  printOutcome(outcome);
+                  printOutcome("./logs/force_close_success.log", outcome);
                 } catch (Error) {
                   console.log("Error: ", Error)
                 }

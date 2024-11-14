@@ -1,5 +1,5 @@
 const Big = require("big.js");
-const { parseRatio } = require("./utils");
+const { parseRatio, printOutcome } = require("./utils");
 
 const parseAccount = (a) => {
   return Object.entries(a.margin_positions).reduce((allPositions, [position, positionInfo]) => {
@@ -102,28 +102,6 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
     }
   }
   return a;
-}
-
-const printOutcome = (filePath, outcome) => {
-  let failureMessages = []
-  let is_success = Object.values(outcome['receipts_outcome']).reduce((is_success, receipt) => {
-    if (receipt["outcome"]["status"].hasOwnProperty("Failure")) {
-      failureMessages.push(receipt["outcome"]["status"])
-      return false;
-    }
-    return is_success;
-  }, true);
-  if (is_success) {
-    logToFile(filePath, new Date() + " success tx: " + outcome["transaction"]["hash"]);
-    console.log("");
-    console.log("success tx: ", outcome["transaction"]["hash"]);
-    console.log("");
-  } else {
-    console.log("");
-    console.log("failed: ");
-    console.log(JSON.stringify(failureMessages, undefined, 2));
-    console.log("");
-  }
 }
 
 const margin_execute_with_price_oracle = async (account, NearConfig, actions) => {

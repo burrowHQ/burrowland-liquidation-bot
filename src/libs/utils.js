@@ -89,6 +89,28 @@ function logToFile(filePath, logContent) {
   }
 }
 
+const printOutcome = (filePath, outcome) => {
+  let failureMessages = []
+  let is_success = Object.values(outcome['receipts_outcome']).reduce((is_success, receipt) => {
+    if (receipt["outcome"]["status"].hasOwnProperty("Failure")) {
+      failureMessages.push(receipt["outcome"]["status"])
+      return false;
+    }
+    return is_success;
+  }, true);
+  if (is_success) {
+    logToFile(filePath, new Date() + " success tx: " + outcome["transaction"]["hash"]);
+    console.log("");
+    console.log("success tx: ", outcome["transaction"]["hash"]);
+    console.log("");
+  } else {
+    console.log("");
+    console.log("failed: ");
+    console.log(JSON.stringify(failureMessages, undefined, 2));
+    console.log("");
+  }
+}
+
 module.exports = {
   bigMin,
   keysToCamel,
@@ -100,5 +122,5 @@ module.exports = {
   sleep,
   PYTH_STALENESS_THRESHOLD,
   decryptAES,
-  logToFile
+  printOutcome
 };
