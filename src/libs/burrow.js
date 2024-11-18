@@ -1,6 +1,6 @@
 const Big = require("big.js");
 const axios = require("axios");
-const { keysToCamel, PYTH_STALENESS_THRESHOLD, printOutcome } = require("./utils");
+const { keysToCamel, PYTH_STALENESS_THRESHOLD, printOutcome, sleep } = require("./utils");
 const { parseAsset } = require("./asset");
 const { parsePriceData } = require("./priceData");
 const { main: check_margin_position } = require("./margin");
@@ -158,6 +158,29 @@ module.exports = {
           const burrow_config = await burrowContract.get_config();
           const prices = burrow_config.enable_price_oracle ? await getPriceOralcePrices(priceOracleContract, assets) : await getPythPrices(account, burrowContract, pythOracleContract);
 
+          const signerString = JSON.stringify(await burrowContract.get_account({
+            account_id: NearConfig.accountId,
+          }));
+          const signerAccount = processAccount(
+            parseAccountDetailed(
+              keysToCamel(
+                JSON.parse(signerString)
+              )
+            ),
+            assets,
+            prices
+          );
+          const maxLiquidationAmount = signerAccount.adjustedCollateralSum.sub(signerAccount.adjustedBorrowedSum);
+          if (maxLiquidationAmount.lte(Big(0))) {
+            console.log("signer account maxLiquidationAmount <= 0");
+            return;
+          }
+
+          if (signerAccount.healthFactor != undefined && signerAccount.healthFactor.lt(NearConfig.stopLiquidationHealthFactor)) {
+            console.log("signer account healthFactor is", signerAccount.healthFactor.toFixed(0), ", wait rebalance");
+            return;
+          }
+
           const allAccounts = responseData.data
             .map((a) => parseAccount(a))
             .flat()
@@ -231,23 +254,6 @@ module.exports = {
 
           let bestLiquidation = null;
           if (liquidate) {
-            const signerString = JSON.stringify(await burrowContract.get_account({
-              account_id: NearConfig.accountId,
-            }));
-            const signerAccount = processAccount(
-              parseAccountDetailed(
-                keysToCamel(
-                  JSON.parse(signerString)
-                )
-              ),
-              assets,
-              prices
-            );
-            const maxLiquidationAmount = signerAccount.adjustedCollateralSum.sub(signerAccount.adjustedBorrowedSum);
-            if (maxLiquidationAmount.lte(Big(0))) {
-              console.log("signer account maxLiquidationAmount <= 0");
-              return;
-            }
             for (let i = 0; i < accountsWithDebt.length; ++i) {
               if (accountsWithDebt[i].accountId == NearConfig.accountId) {
                 continue;

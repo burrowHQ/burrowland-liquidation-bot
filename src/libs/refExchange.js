@@ -308,9 +308,9 @@ async function prepareRef(nearObjects) {
         if (pool.pool_kind === RatedPool) {
           p.rates = tt.map((tokenId) => {
             if (!(tokenId in ratedTokens)) {
-              console.log(
-                `Missing token rate for token ${tokenId} for pool #${i}`
-              );
+              // console.log(
+              //   `Missing token rate for token ${tokenId} for pool #${i}`
+              // );
               shouldSkip = true;
             }
             return ratedTokens[tokenId]?.rate_price;
@@ -559,7 +559,10 @@ async function refSell(nearObjects, tokenId, amountIn) {
   );
 
   if (swapInfo.pools) {
-    return executeSwap(nearObjects, swapInfo);
+    return executeSwap(nearObjects, swapInfo).catch(error => {
+      console.log('refSell executeSwap failed', error)
+      process.exit(0)
+    });
   } else {
     console.log("refSell ", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
     await sleep(10000);
@@ -567,11 +570,14 @@ async function refSell(nearObjects, tokenId, amountIn) {
 }
 
 async function refBuy(nearObjects, tokenId, amountOut) {
-  const { NearConfig } = nearObjects;
+  const { NearConfig, tokenContract } = nearObjects;
 
   if (tokenId === NearConfig.wrapNearAccountId) {
     return amountOut;
   }
+
+  const wrapNearTokenContract = tokenContract(NearConfig.wrapNearAccountId);
+  let wrapNearBalance = Big(await wrapNearTokenContract.ft_balance_of({ account_id: NearConfig.accountId }))
 
   const refFinance = await prepareRef(nearObjects);
   const swapInfo = findBestInverseReturn(
@@ -582,10 +588,18 @@ async function refBuy(nearObjects, tokenId, amountOut) {
     amountOut
   );
 
+  if (swapInfo.pools && wrapNearBalance.lt(swapInfo.amountIn)) {
+    console.log("Needs", swapInfo.amountIn.toFixed(0), "wrap to Buying, but the account balance is only", wrapNearBalance.toFixed(0))
+    return;
+  }
+
   if (swapInfo.pools) {
-    return executeSwap(nearObjects, swapInfo);
+    return executeSwap(nearObjects, swapInfo).catch(error => {
+      console.log('refBuy executeSwap failed', error)
+      process.exit(0)
+    });
   } else {
-    console.log("refBuy ", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
+    console.log("refBuy", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
     await sleep(5000);
   }
 }

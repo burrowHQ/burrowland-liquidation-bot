@@ -115,6 +115,7 @@ module.exports = {
     config.maxLiquidationAmount = Big(
       process.env.MAX_LIQUIDATION_AMOUNT || "20000"
     );
+    config.stopLiquidationHealthFactor = Big(process.env.STOP_LIQUIDATION_HEALTH_FACTOR || "10");
     config.maxWithdrawCount = parseInt(process.env.MAX_WITHDRAW_COUNT || "5");
     config.forceClose = !!process.env.FORCE_CLOSE;
     config.marginPosition = !!process.env.MARGIN_POSITION;
