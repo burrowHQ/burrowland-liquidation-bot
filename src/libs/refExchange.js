@@ -24,6 +24,7 @@ const tokenDecimals = {
 };
 
 let tokenCache = null;
+let swapFailedConter = 0;
 
 async function fetchUsdTokensDecimals(tokenContract, tokenId) {
   if (tokenId in tokenDecimals) {
@@ -559,10 +560,20 @@ async function refSell(nearObjects, tokenId, amountIn) {
   );
 
   if (swapInfo.pools) {
-    return executeSwap(nearObjects, swapInfo).catch(error => {
-      console.log('refSell executeSwap failed', error)
-      process.exit(0)
-    });
+    return executeSwap(nearObjects, swapInfo)
+      .then(() => {
+        swapFailedConter = 0;
+        console.log('refSell executeSwap succeeded');
+      })
+      .catch(error => {
+        if (swapFailedConter < NearConfig.swapFailedLimit) {
+          swapFailedConter += 1;
+          console.log(`refSell executeSwap failed(${swapFailedConter} times):`, error)
+        } else {
+          console.log(`refSell executeSwap failed(${swapFailedConter} times):`, error)
+          process.exit(1)
+        }
+      });
   } else {
     console.log("refSell ", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
     await sleep(10000);
@@ -594,10 +605,20 @@ async function refBuy(nearObjects, tokenId, amountOut) {
   }
 
   if (swapInfo.pools) {
-    return executeSwap(nearObjects, swapInfo).catch(error => {
-      console.log('refBuy executeSwap failed', error)
-      process.exit(0)
-    });
+    return executeSwap(nearObjects, swapInfo)
+      .then(() => {
+        swapFailedConter = 0;
+        console.log('refBuy executeSwap succeeded');
+      })
+      .catch(error => {
+        if (swapFailedConter < NearConfig.swapFailedLimit) {
+          swapFailedConter += 1;
+          console.log(`refBuy executeSwap failed(${swapFailedConter} times):`, error)
+        } else {
+          console.log(`refBuy executeSwap failed(${swapFailedConter} times):`, error)
+          process.exit(1)
+        }
+      });
   } else {
     console.log("refBuy", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
     await sleep(5000);

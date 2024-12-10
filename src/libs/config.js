@@ -119,6 +119,7 @@ module.exports = {
     config.maxWithdrawCount = parseInt(process.env.MAX_WITHDRAW_COUNT || "5");
     config.forceClose = !!process.env.FORCE_CLOSE;
     config.marginPosition = !!process.env.MARGIN_POSITION;
+    config.swapFailedLimit = process.env.SWAP_FAILED_LIMIT || 5;
     return config;
   },
 };
