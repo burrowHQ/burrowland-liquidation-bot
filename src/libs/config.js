@@ -149,10 +149,10 @@ module.exports = {
     );
     config.stopLiquidationHealthFactor = Big(process.env.STOP_LIQUIDATION_HEALTH_FACTOR || "10");
     config.maxWithdrawCount = parseInt(process.env.MAX_WITHDRAW_COUNT || "5");
-    config.liquidate = !!process.env.LIQUIDATE;
-    config.forceClose = !!process.env.FORCE_CLOSE;
-    config.marginLiquidate = !!process.env.MARGIN_LIQUIDATE;
-    config.marginForceClose = !!process.env.MARGIN_FORCE_CLOSE;
+    config.liquidate = process.env.LIQUIDATE == 'true' || false;
+    config.forceClose = process.env.FORCE_CLOSE == 'true' || false;
+    config.marginLiquidate = process.env.MARGIN_LIQUIDATE == 'true' || false;
+    config.marginForceClose = process.env.MARGIN_FORCE_CLOSE == 'true' || false;
     config.swapFailedLimit = process.env.SWAP_FAILED_LIMIT || 5;
     config.logLevel = process.env.LOG_LEVEL || 'info';
     return config;
