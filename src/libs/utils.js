@@ -2,6 +2,8 @@ const Big = require("big.js");
 const fs = require("fs");
 const path = require('path');
 const CryptoJS = require("crypto-js");
+const log4js = require('log4js');
+const liquidateLogger = log4js.getLogger();
 
 const PYTH_STALENESS_THRESHOLD = 60;
 
@@ -89,7 +91,7 @@ function logToFile(filePath, logContent) {
   }
 }
 
-const printOutcome = (filePath, outcome) => {
+const printOutcome = (prefix, filePath, outcome) => {
   let failureMessages = []
   let is_success = Object.values(outcome['receipts_outcome']).reduce((is_success, receipt) => {
     if (receipt["outcome"]["status"].hasOwnProperty("Failure")) {
@@ -100,14 +102,9 @@ const printOutcome = (filePath, outcome) => {
   }, true);
   if (is_success) {
     logToFile(filePath, new Date() + " success tx: " + outcome["transaction"]["hash"]);
-    console.log("");
-    console.log("success tx: ", outcome["transaction"]["hash"]);
-    console.log("");
+    liquidateLogger.log(prefix, "success tx: ", outcome["transaction"]["hash"]);
   } else {
-    console.log("");
-    console.log("failed: ");
-    console.log(JSON.stringify(failureMessages, undefined, 2));
-    console.log("");
+    liquidateLogger.error(prefix, "failed: ", JSON.stringify(failureMessages, undefined, 2));
   }
 }
 

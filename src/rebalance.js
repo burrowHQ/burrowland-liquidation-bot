@@ -8,6 +8,9 @@ const { parseAccountDetailed, processAccount } = require("./libs/account");
 const { refSell, refBuy } = require("./libs/refExchange");
 const readlineSync = require('readline-sync');
 
+const log4js = require('log4js');
+const rebalanceLogger = log4js.getLogger();
+
 function getPassword() {
   return readlineSync.question('Please enter your password: ', {
     hideEchoBack: true
@@ -17,7 +20,7 @@ function getPassword() {
 Big.DP = 27;
 
 async function main(nearObjects, rebalance) {
-  console.log(new Date())
+  rebalanceLogger.info('Rebalance Begin');
   const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, NearConfig } =
     nearObjects;
 
@@ -70,7 +73,7 @@ async function main(nearObjects, rebalance) {
       const amount = depositAmount.div(mul).round(0, 0);
       if (amount.gt(0)) {
         // Depositing then maybe repaying
-        console.log(
+        rebalanceLogger.debug(
           `Depositing ${b.tokenId} amount ${amount.toFixed(0)} and repaying`
         );
         await token.ft_transfer_call(
@@ -101,7 +104,7 @@ async function main(nearObjects, rebalance) {
 
     if (s && s.pricedBalance.gt(NearConfig.minRepayAmount)) {
       const amount = bigMin(b.balance, s.balance);
-      console.log(`Repaying ${b.tokenId} amount ${amount.toFixed(0)}`);
+      rebalanceLogger.debug(`Repaying ${b.tokenId} amount ${amount.toFixed(0)}`);
       repayingActions.push({
         Repay: {
           token_id: b.tokenId,
@@ -129,7 +132,7 @@ async function main(nearObjects, rebalance) {
   for (let i = 0; i < burrowAccount.supplied.length; ++i) {
     const s = burrowAccount.supplied[i];
     if (s.pricedBalance?.gt(NearConfig.minSwapAmount)) {
-      console.log(`Withdrawing ${s.tokenId} amount ${s.balance.toFixed(0)}`);
+      rebalanceLogger.debug(`Withdrawing ${s.tokenId} amount ${s.balance.toFixed(0)}`);
       withdrawActions.push({
         Withdraw: {
           token_id: s.tokenId,
@@ -190,7 +193,7 @@ async function main(nearObjects, rebalance) {
       ? balance.mul(price.multiplier).div(Big(10).pow(price.decimals))
       : null;
     if (pricedBalance?.gt(NearConfig.minSwapAmount)) {
-      console.log(`Selling ${tokenId} amount ${balance.toFixed(0)}`);
+      rebalanceLogger.debug(`Selling ${tokenId} amount ${balance.toFixed(0)}`);
       // Swapping this asset for wNEAR
       await refSell(nearObjects, tokenId, balance);
       return main(nearObjects, rebalance);
@@ -201,14 +204,14 @@ async function main(nearObjects, rebalance) {
   for (let i = 0; i < burrowAccount.borrowed.length; ++i) {
     const b = burrowAccount.borrowed[i];
     if (b.pricedBalance?.gt(NearConfig.minSwapAmount)) {
-      console.log(`Buying ${b.tokenId} amount ${b.balance.toFixed(0)}`);
+      rebalanceLogger.debug(`Buying ${b.tokenId} amount ${b.balance.toFixed(0)}`);
       // Buying this asset for wNEAR
       const token = tokenContract(b.tokenId);
       const storageBalance = await token.storage_balance_of({
         account_id: NearConfig.accountId,
       });
       if (Big(storageBalance?.total || 0).eq(0)) {
-        console.log(`Paying storage for ${b.tokenId}`);
+        rebalanceLogger.debug(`Paying storage for ${b.tokenId}`);
         await token.storage_deposit(
           {
             signerAccount: account,
@@ -228,7 +231,7 @@ async function main(nearObjects, rebalance) {
         b.tokenBalance
       );
       if (balance.gt(0)) {
-        console.log(`Depositing ${b.tokenId} amount ${balance.toFixed(0)}`);
+        rebalanceLogger.debug(`Depositing ${b.tokenId} amount ${balance.toFixed(0)}`);
         await token.ft_transfer_call(
           {
             signerAccount: account,
@@ -248,11 +251,30 @@ async function main(nearObjects, rebalance) {
 }
 
 initNear(true, getPassword()).then((nearObject) => {
+  const { NearConfig } = nearObject;
+  log4js.configure({
+    appenders: {
+      console: { type: 'console' },
+      dateFileAppender: {
+        type: 'dateFile',
+        filename: 'logs/rebalance',
+        pattern: 'yyyy-MM-dd.log',
+        numBackups: 7,
+        compress: true,
+        maxLogSize: 1024 * 1024 * 1024,
+        alwaysIncludePattern: true
+      }
+    },
+    categories: {
+      default: { appenders: ['console', 'dateFileAppender'], level: NearConfig.logLevel }
+    }
+  });
   const executeAsyncOperation = () => {
     main(nearObject, true).then(() => {
+      rebalanceLogger.info('Rebalance End');
       setTimeout(executeAsyncOperation, nearObject.NearConfig.loopInterval);
     }).catch(error => {
-      console.error('Rebalance failed:', error);
+      rebalanceLogger.error('Rebalance Failed:', error);
       setTimeout(executeAsyncOperation, nearObject.NearConfig.loopInterval);
     })
   }

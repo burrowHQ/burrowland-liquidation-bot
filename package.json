@@ -12,6 +12,7 @@
     "big.js": "^6.0.3",
     "crypto-js": "^4.2.0",
     "lodash": "^4.17.21",
+    "log4js": "^6.9.1",
     "near-api-js": "^5.0.0",
     "node-fetch": "^2.6.1",
     "react-ga": "^3.3.0",

@@ -1,5 +1,7 @@
 const Big = require("big.js");
 const { bigMin } = require("./utils");
+const log4js = require('log4js');
+const liquidateLogger = log4js.getLogger();
 
 const volatilityRatioCmp = (a, b) =>
   b.volatilityRatio.cmp(a.volatilityRatio);
@@ -373,7 +375,7 @@ const computeLiquidation = (
   //     .mul(100)
   //     .toFixed(2)}% discount ${account.discount.mul(100).toFixed(2)}%`
   // );
-  console.log(
+  liquidateLogger.debug(
     `Maybe liq ${account.accountId} -> position ${account.position} -> discount ${origDiscount
       .mul(100)
       .toFixed(2)}% -> profit $${totalPricedProfit.toFixed(3)}`
