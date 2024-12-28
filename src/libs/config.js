@@ -1,4 +1,29 @@
 const Big = require("big.js");
+
+const generateMarginRouterV1 = (dex_id, details) => {
+  const actions = details.map(([pool_id, token_in, token_out]) => {
+    return {
+      pool_id,
+      token_in,
+      token_out,
+      min_amount_out: '0',
+    }
+  });
+  return {
+    dex_id,
+    dex_type: 1,
+    actions,
+  }
+}
+
+const generateMarginRouterV2 = (dex_id, pool_ids) => {
+  return {
+    dex_id,
+    dex_type: 2,
+    pool_ids,
+  }
+}
+
 module.exports = {
   getConfig: (env) => {
     const config = (() => {
@@ -12,7 +37,7 @@ module.exports = {
             helperUrl: "https://helper.mainnet.near.org",
             explorerUrl: "https://explorer.mainnet.near.org",
             refFinanceContractId: "v2.ref-finance.near",
-            priceOracleContractId: "priceoracle.near",
+            priceOracleContractId: process.env.PRICE_ORACLE_CONTRACT_ID || "priceoracle.near",
             pythOracleContractId: "pyth-oracle.near",
             burrowContractId: process.env.BURROW_CONTRACT_ID || "contract.main.burrow.near",
             accountId: process.env.NEAR_ACCOUNT_ID,
@@ -31,7 +56,7 @@ module.exports = {
             explorerUrl: "https://explorer.testnet.near.org",
             refFinanceContractId: "dev-1704418570028-31304846290234",
             // refFinanceContractId: "ref-finance-101.testnet",
-            priceOracleContractId: "dev-1700791085144-86637101874849",
+            priceOracleContractId: process.env.PRICE_ORACLE_CONTRACT_ID || "dev-1700791085144-86637101874849",
             pythOracleContractId: "pyth-oracle.testnet",
             burrowContractId: process.env.BURROW_CONTRACT_ID || "dev-1707132736890-13749887598327",
             accountId: process.env.NEAR_ACCOUNT_ID,
@@ -47,16 +72,8 @@ module.exports = {
               //   dex_type: 1,
               //   pool_id: 0
               // },
-              "usdt.fakes.testnet&dai.fakes.testnet": {
-                dex_id: "dev-1707136746796-79997967772528",
-                dex_type: 2,
-                pool_ids: ["dai.fakes.testnet|usdt.fakes.testnet|100"]
-              },
-              "dai.fakes.testnet&usdt.fakes.testnet": {
-                dex_id: "dev-1707136746796-79997967772528",
-                dex_type: 2,
-                pool_ids: ["dai.fakes.testnet|usdt.fakes.testnet|100"]
-              },
+              "usdt.fakes.testnet&dai.fakes.testnet": generateMarginRouterV2("dev-1707136746796-79997967772528", ["dai.fakes.testnet|usdt.fakes.testnet|100"]),
+              "dai.fakes.testnet&usdt.fakes.testnet": generateMarginRouterV2("dev-1707136746796-79997967772528", ["dai.fakes.testnet|usdt.fakes.testnet|100"]),
             },
             loopInterval: process.env.LOOP_INTERVAL || 5000,
             encodePrivateKey: process.env.ENCODE_PRIVATE_KEY,
@@ -71,7 +88,7 @@ module.exports = {
             helperUrl: "https://helper.testnet.near.org",
             explorerUrl: "https://explorer.testnet.near.org",
             refFinanceContractId: "exchange.ref-dev.testnet",
-            priceOracleContractId: "mock-priceoracle.testnet",
+            priceOracleContractId: process.env.PRICE_ORACLE_CONTRACT_ID || "mock-priceoracle.testnet",
             pythOracleContractId: "pyth-oracle.testnet",
             burrowContractId: process.env.BURROW_CONTRACT_ID || "contract.dev-burrow.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
@@ -81,36 +98,101 @@ module.exports = {
             dataServiceUrl: process.env.DATA_SERVICE_URL,
             topN: process.env.TOPN || 50,
             marginRouter: {
-              "wrap.testnet&usdcc.ft.ref-labs.testnet": {
-                dex_id: "exchange.ref-dev.testnet",
-                dex_type: 1,
-                pool_id: 758
-              },
-              "usdcc.ft.ref-labs.testnet&wrap.testnet": {
-                dex_id: "exchange.ref-dev.testnet",
-                dex_type: 1,
-                pool_id: 758
-              },
-              // "wrap.testnet&usdcc.ft.ref-labs.testnet": {
-              //   dex_id: "dev-1707136746796-79997967772528",
-              //   dex_type: 2,
-              //   pool_ids: ["usdcc.ft.ref-labs.testnet|wrap.testnet|400"]
-              // },
-              // "usdcc.ft.ref-labs.testnet&wrap.testnet": {
-              //   dex_id: "dev-1707136746796-79997967772528",
-              //   dex_type: 2,
-              //   pool_ids: ["usdcc.ft.ref-labs.testnet|wrap.testnet|400"]
-              // },
-              "wrap.testnet&usdte.ft.ref-labs.testnet": {
-                dex_id: "exchange.ref-dev.testnet",
-                dex_type: 1,
-                pool_id: 726
-              },
-              "usdte.ft.ref-labs.testnet&wrap.testnet": {
-                dex_id: "exchange.ref-dev.testnet",
-                dex_type: 1,
-                pool_id: 726
-              },
+              "wrap.testnet&usdcc.ft.ref-labs.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [758, 'wrap.testnet', 'usdcc.ft.ref-labs.testnet'],
+                ]),
+              "usdcc.ft.ref-labs.testnet&wrap.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [758, 'usdcc.ft.ref-labs.testnet', 'wrap.testnet'], 
+                ]),
+              // "wrap.testnet&usdcc.ft.ref-labs.testnet": generateMarginRouterV2("refv2-dev.ref-dev.testnet", ["usdcc.ft.ref-labs.testnet|wrap.testnet|400"]),
+              // "usdcc.ft.ref-labs.testnet&wrap.testnet": generateMarginRouterV2("refv2-dev.ref-dev.testnet", ["usdcc.ft.ref-labs.testnet|wrap.testnet|400"]),
+              "wrap.testnet&usdte.ft.ref-labs.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [726, 'wrap.testnet', 'usdte.ft.ref-labs.testnet'],
+                ]),
+              "usdte.ft.ref-labs.testnet&wrap.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [726, 'usdte.ft.ref-labs.testnet', 'wrap.testnet'], 
+                ]),
+              "usdte.ft.ref-labs.testnet&token.dev-burrow.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [726, 'usdte.ft.ref-labs.testnet', 'wrap.testnet'], 
+                  [759, 'wrap.testnet', 'token.dev-burrow.testnet'],
+                ]),
+              "token.dev-burrow.testnet&usdte.ft.ref-labs.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [759, 'token.dev-burrow.testnet', 'wrap.testnet'],
+                  [726, 'wrap.testnet', 'usdte.ft.ref-labs.testnet'], 
+                ]),
+              "usdte.ft.ref-labs.testnet&willa.fakes.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [726, 'usdte.ft.ref-labs.testnet', 'wrap.testnet'], 
+                  [459, 'wrap.testnet', 'willa.fakes.testnet'],
+                ]),
+              "willa.fakes.testnet&usdte.ft.ref-labs.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [459, 'willa.fakes.testnet', 'wrap.testnet'],
+                  [726, 'wrap.testnet', 'usdte.ft.ref-labs.testnet'], 
+                ]),
+              "usdte.ft.ref-labs.testnet&lonk.fakes.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [726, 'usdte.ft.ref-labs.testnet', 'wrap.testnet'], 
+                  [716, 'wrap.testnet', 'lonk.fakes.testnet'],
+                ]),
+              "lonk.fakes.testnet&usdte.ft.ref-labs.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [716, 'lonk.fakes.testnet', 'wrap.testnet'],
+                  [726, 'wrap.testnet', 'usdte.ft.ref-labs.testnet'], 
+                ]),
+
+              "usdce.ft.ref-labs.testnet&token.dev-burrow.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [725, 'usdce.ft.ref-labs.testnet', 'wrap.testnet'], 
+                  [759, 'wrap.testnet', 'token.dev-burrow.testnet'],
+                ]),
+              "token.dev-burrow.testnet&usdce.ft.ref-labs.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [759, 'token.dev-burrow.testnet', 'wrap.testnet'],
+                  [725, 'wrap.testnet', 'usdce.ft.ref-labs.testnet'], 
+                ]),
+              "usdce.ft.ref-labs.testnet&willa.fakes.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [725, 'usdce.ft.ref-labs.testnet', 'wrap.testnet'], 
+                  [459, 'wrap.testnet', 'willa.fakes.testnet'],
+                ]),
+              "willa.fakes.testnet&usdce.ft.ref-labs.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [459, 'willa.fakes.testnet', 'wrap.testnet'],
+                  [725, 'wrap.testnet', 'usdce.ft.ref-labs.testnet'], 
+                ]),
+              "usdce.ft.ref-labs.testnet&lonk.fakes.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [725, 'usdce.ft.ref-labs.testnet', 'wrap.testnet'], 
+                  [716, 'wrap.testnet', 'lonk.fakes.testnet'],
+                ]),
+              "lonk.fakes.testnet&usdce.ft.ref-labs.testnet": generateMarginRouterV1(
+                "exchange.ref-dev.testnet",
+                [
+                  [716, 'lonk.fakes.testnet', 'wrap.testnet'],
+                  [725, 'wrap.testnet', 'usdce.ft.ref-labs.testnet'], 
+                ]),
             },
           };
         case "testnet_public":
@@ -121,7 +203,7 @@ module.exports = {
             helperUrl: "https://helper.testnet.near.org",
             explorerUrl: "https://explorer.testnet.near.org",
             refFinanceContractId: "ref-finance-101.testnet",
-            priceOracleContractId: "priceoracle.services.ref-labs.testnet",
+            priceOracleContractId: process.env.PRICE_ORACLE_CONTRACT_ID || "priceoracle.services.ref-labs.testnet",
             pythOracleContractId: "pyth-oracle.testnet",
             burrowContractId: process.env.BURROW_CONTRACT_ID || "burrow.services.ref-labs.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,

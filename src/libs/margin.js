@@ -27,6 +27,17 @@ const parseAccount = (a) => {
   }, []);
 };
 
+const updateActions = (actions, amount_in, min_amount_out) => {
+  // deep copy
+  const actionsStr = JSON.stringify(actions);
+  const newActions = JSON.parse(actionsStr);
+
+  const lastActionIndex = actions.length - 1;
+  newActions[0]["amount_in"] = amount_in;
+  newActions[lastActionIndex]["min_amount_out"] = min_amount_out;
+  return newActions
+}
+
 const processAccount = (a, assets, prices, NearConfig, margin_config) => {
   a.c_asset = assets[a.token_c_info.token_id];
   a.d_asset = assets[a.token_d_info.token_id];
@@ -57,8 +68,8 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
     const routerId = a.token_p_id + "&" + a.token_d_info.token_id;
     const token_p_amount_arg = a.token_c_info.token_id == a.token_d_info.token_id ? a.token_p_amount : a.token_p_amount.add(a.token_c_info.balance);
     const min_token_d_amount_arg = a.token_c_info.token_id == a.token_d_info.token_id ?
-      a.token_p_price_balance.mul(Big(10).pow(a.d_price.decimals + a.d_asset.config.extraDecimals)).mul(Big(0.999)).div(a.d_price.multiplier).round(0, 0) :
-      a.token_p_price_balance.add(a.token_c_price_balance).mul(Big(10).pow(a.d_price.decimals + a.d_asset.config.extraDecimals)).mul(Big(0.999)).div(a.d_price.multiplier).round(0, 0);
+      a.token_p_price_balance.mul(Big(10).pow(a.d_price.decimals + a.d_asset.config.extraDecimals)).mul(Big(0.99)).div(a.d_price.multiplier).round(0, 0) :
+      a.token_p_price_balance.add(a.token_c_price_balance).mul(Big(10).pow(a.d_price.decimals + a.d_asset.config.extraDecimals)).mul(Big(0.99)).div(a.d_price.multiplier).round(0, 0);
     if (NearConfig.marginRouter[routerId]) {
       const args = {
         pos_owner_id: a.accountId,
@@ -68,13 +79,11 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
         swap_indication: {
           dex_id: NearConfig.marginRouter[routerId].dex_id,
           swap_action_text: NearConfig.marginRouter[routerId].dex_type == 1 ? JSON.stringify({
-            actions: [{
-              pool_id: NearConfig.marginRouter[routerId].pool_id,
-              token_in: a.token_p_id,
-              amount_in: token_p_amount_arg.div(Big(10).pow(a.p_asset.config.extraDecimals)).round(0, 0).toFixed(0),
-              token_out: a.token_d_info.token_id,
-              min_amount_out: min_token_d_amount_arg.div(Big(10).pow(a.d_asset.config.extraDecimals)).round(0, 0).toFixed(0),
-            }]
+            actions: updateActions(
+              NearConfig.marginRouter[routerId].actions, 
+              token_p_amount_arg.div(Big(10).pow(a.p_asset.config.extraDecimals)).round(0, 0).toFixed(0), 
+              min_token_d_amount_arg.div(Big(10).pow(a.d_asset.config.extraDecimals)).round(0, 0).toFixed(0)
+            )
           }) :
             JSON.stringify({
               Swap: {
