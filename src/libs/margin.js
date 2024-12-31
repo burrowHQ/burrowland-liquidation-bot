@@ -225,36 +225,39 @@ module.exports = {
 
     {
       const liquidator = await burrowContract.get_margin_account({ account_id: NearConfig.accountId });
-
-      const withdrawActions = [];
-      for (let i = 0; i < liquidator.supplied.length; ++i) {
-        const s = liquidator.supplied[i];
-        const asset = assets[s.token_id];
-        const price = prices?.prices[s.token_id];
-        const pricedBalance = Big(s.balance)
-          .mul(price.multiplier)
-          .div(Big(10).pow(price.decimals + asset.config.extraDecimals))
-        if (pricedBalance.gt(NearConfig.minSwapAmount)) {
-          liquidateLogger.debug(`Withdrawing ${s.token_id} amount ${s.balance}`);
-          withdrawActions.push({
-            Withdraw: {
-              token_id: s.token_id,
-            },
-          });
+      if (liquidator) {
+        const withdrawActions = [];
+        for (let i = 0; i < liquidator.supplied.length; ++i) {
+          const s = liquidator.supplied[i];
+          const asset = assets[s.token_id];
+          const price = prices?.prices[s.token_id];
+          const pricedBalance = Big(s.balance)
+            .mul(price.multiplier)
+            .div(Big(10).pow(price.decimals + asset.config.extraDecimals))
+          if (pricedBalance.gt(NearConfig.minSwapAmount)) {
+            liquidateLogger.debug(`Withdrawing ${s.token_id} amount ${s.balance}`);
+            withdrawActions.push({
+              Withdraw: {
+                token_id: s.token_id,
+              },
+            });
+          }
         }
-      }
-
-      if (withdrawActions.length > 0) {
-        liquidateLogger.debug(JSON.stringify(withdrawActions, undefined, 2))
-        await account.functionCall({
-          "contractId": NearConfig.burrowContractId,
-          "methodName": "margin_execute",
-          "args": {
-            "actions": withdrawActions,
-          },
-          "gas": Big(10).pow(12).mul(300).toFixed(0),
-          "attachedDeposit": "1",
-        })
+  
+        if (withdrawActions.length > 0) {
+          liquidateLogger.debug(JSON.stringify(withdrawActions, undefined, 2))
+          await account.functionCall({
+            "contractId": NearConfig.burrowContractId,
+            "methodName": "margin_execute",
+            "args": {
+              "actions": withdrawActions,
+            },
+            "gas": Big(10).pow(12).mul(300).toFixed(0),
+            "attachedDeposit": "1",
+          })
+        }
+      } else {
+        liquidateLogger.error("The liquidator is not registered.")
       }
     }
   }
