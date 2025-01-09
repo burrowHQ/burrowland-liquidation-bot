@@ -6,16 +6,9 @@ const { parseAsset } = require("./libs/asset");
 const { parsePriceData } = require("./libs/priceData");
 const { parseAccountDetailed, processAccount } = require("./libs/account");
 const { refSell, refBuy } = require("./libs/refExchange");
-const readlineSync = require('readline-sync');
 
 const log4js = require('log4js');
 const rebalanceLogger = log4js.getLogger();
-
-function getPassword() {
-  return readlineSync.question('Please enter your password: ', {
-    hideEchoBack: true
-  });
-}
 
 Big.DP = 27;
 
@@ -23,6 +16,14 @@ async function main(nearObjects, rebalance) {
   rebalanceLogger.info('Rebalance Begin');
   const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, NearConfig } =
     nearObjects;
+
+  const burrowContractAccount = await burrowContract.get_account({
+    account_id: NearConfig.accountId,
+  });
+  if (burrowContractAccount == null) {
+    rebalanceLogger.error(`${NearConfig.accountId} has not registered ${NearConfig.burrowContractId}`);
+    return;
+  }
 
   const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
   const assets = rawAssets.reduce((assets, [assetId, asset]) => {
@@ -41,9 +42,7 @@ async function main(nearObjects, rebalance) {
   const burrowAccount = processAccount(
     parseAccountDetailed(
       keysToCamel(
-        await burrowContract.get_account({
-          account_id: NearConfig.accountId,
-        })
+        burrowContractAccount
       )
     ),
     assets,
@@ -224,7 +223,7 @@ async function main(nearObjects, rebalance) {
       // Don't attempt buy wNEAR
       if (!(b.tokenId === NearConfig.wrapNearAccountId)) {
         await refBuy(nearObjects, b.tokenId, b.tokenBalance);
-      } 
+      }
 
       const balance = bigMin(
         Big(await token.ft_balance_of({ account_id: NearConfig.accountId })),
@@ -250,7 +249,7 @@ async function main(nearObjects, rebalance) {
   }
 }
 
-initNear(true, getPassword()).then((nearObject) => {
+initNear(true).then((nearObject) => {
   const { NearConfig } = nearObject;
   log4js.configure({
     appenders: {

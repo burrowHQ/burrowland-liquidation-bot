@@ -80,8 +80,8 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
           dex_id: NearConfig.marginRouter[routerId].dex_id,
           swap_action_text: NearConfig.marginRouter[routerId].dex_type == 1 ? JSON.stringify({
             actions: updateActions(
-              NearConfig.marginRouter[routerId].actions, 
-              token_p_amount_arg.div(Big(10).pow(a.p_asset.config.extraDecimals)).round(0, 0).toFixed(0), 
+              NearConfig.marginRouter[routerId].actions,
+              token_p_amount_arg.div(Big(10).pow(a.p_asset.config.extraDecimals)).round(0, 0).toFixed(0),
               min_token_d_amount_arg.div(Big(10).pow(a.d_asset.config.extraDecimals)).round(0, 0).toFixed(0)
             )
           }) :
@@ -149,12 +149,17 @@ const margin_execute_with_pyth_oracle = async (account, NearConfig, actions) => 
 
 module.exports = {
   main: async (account, burrow_config, NearConfig, burrowContract, assets, prices, marginLiquidate, marginForceClose) => {
+    const liquidator = await burrowContract.get_margin_account({ account_id: NearConfig.accountId });
+    if (!liquidator) {
+      liquidateLogger.error(`${NearConfig.accountId} has not registered ${NearConfig.burrowContractId}`);
+      return;
+    }
     const margin_config = await burrowContract.get_margin_config();
     const numAccountsStr = await burrowContract.get_num_margin_accounts();
     const numAccounts = parseInt(numAccountsStr);
     liquidateLogger.debug("Num marginn accounts: ", numAccounts);
 
-    const limit = 150;
+    const limit = NearConfig.marginPagedLimit;
 
     const promises = [];
     for (let i = 0; i < numAccounts; i += limit) {
@@ -224,40 +229,35 @@ module.exports = {
     }
 
     {
-      const liquidator = await burrowContract.get_margin_account({ account_id: NearConfig.accountId });
-      if (liquidator) {
-        const withdrawActions = [];
-        for (let i = 0; i < liquidator.supplied.length; ++i) {
-          const s = liquidator.supplied[i];
-          const asset = assets[s.token_id];
-          const price = prices?.prices[s.token_id];
-          const pricedBalance = Big(s.balance)
-            .mul(price.multiplier)
-            .div(Big(10).pow(price.decimals + asset.config.extraDecimals))
-          if (pricedBalance.gt(NearConfig.minSwapAmount)) {
-            liquidateLogger.debug(`Withdrawing ${s.token_id} amount ${s.balance}`);
-            withdrawActions.push({
-              Withdraw: {
-                token_id: s.token_id,
-              },
-            });
-          }
-        }
-  
-        if (withdrawActions.length > 0) {
-          liquidateLogger.debug(JSON.stringify(withdrawActions, undefined, 2))
-          await account.functionCall({
-            "contractId": NearConfig.burrowContractId,
-            "methodName": "margin_execute",
-            "args": {
-              "actions": withdrawActions,
+      const withdrawActions = [];
+      for (let i = 0; i < liquidator.supplied.length; ++i) {
+        const s = liquidator.supplied[i];
+        const asset = assets[s.token_id];
+        const price = prices?.prices[s.token_id];
+        const pricedBalance = Big(s.balance)
+          .mul(price.multiplier)
+          .div(Big(10).pow(price.decimals + asset.config.extraDecimals))
+        if (pricedBalance.gt(NearConfig.minSwapAmount)) {
+          liquidateLogger.debug(`Withdrawing ${s.token_id} amount ${s.balance}`);
+          withdrawActions.push({
+            Withdraw: {
+              token_id: s.token_id,
             },
-            "gas": Big(10).pow(12).mul(300).toFixed(0),
-            "attachedDeposit": "1",
-          })
+          });
         }
-      } else {
-        liquidateLogger.error("The liquidator is not registered.")
+      }
+
+      if (withdrawActions.length > 0) {
+        liquidateLogger.debug(JSON.stringify(withdrawActions, undefined, 2))
+        await account.functionCall({
+          "contractId": NearConfig.burrowContractId,
+          "methodName": "margin_execute",
+          "args": {
+            "actions": withdrawActions,
+          },
+          "gas": Big(10).pow(12).mul(300).toFixed(0),
+          "attachedDeposit": "1",
+        })
       }
     }
   }

@@ -5,10 +5,17 @@ const { getConfig } = require("./config");
 const path = require("path");
 const { decryptAES } = require("./utils");
 
+const readlineSync = require('readline-sync');
+function getPassword() {
+  return readlineSync.question('Please enter your password: ', {
+    hideEchoBack: true
+  });
+}
+
 const NearConfig = getConfig(process.env.NEAR_ENV || "development");
 
 module.exports = {
-  initNear: async (loadAccount, password) => {
+  initNear: async (loadAccount) => {
     const keyStore = new nearAPI.keyStores.InMemoryKeyStore();
 
     let near;
@@ -17,6 +24,7 @@ module.exports = {
 
     if (loadAccount) {
       if (NearConfig.encodePrivateKey) {
+        const password = getPassword();
         const privateKey = decryptAES(NearConfig.encodePrivateKey, password);
         if (privateKey == '') {
           console.error("Invalid password");
@@ -33,8 +41,22 @@ module.exports = {
         });
         account = new nearAPI.Account(connection, NearConfig.accountId);
       } else {
-        console.error("Missing encodePrivateKey");
-        process.exit(1);
+        const keyPath =
+          path.join(
+            os.homedir(),
+            ".near-credentials",
+            NearConfig.networkId,
+            NearConfig.accountId + ".json"
+          );
+        near = await nearAPI.connect(
+          Object.assign({ keyPath, deps: { keyStore } }, NearConfig)
+        );
+        connection = near.connection;
+        account = new nearAPI.Account(near.connection, NearConfig.accountId);
+        if (await account.connection.signer.getPublicKey(NearConfig.accountId, NearConfig.networkId) == null) {
+          console.error("nearAPI.Account failed!");
+          process.exit(1)
+        }
       }
     } else {
       const nearRpc = new nearAPI.providers.JsonRpcProvider(NearConfig.nodeUrl);

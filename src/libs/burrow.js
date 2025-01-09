@@ -136,7 +136,13 @@ module.exports = {
   main: async (nearObjects, { liquidate = false, forceClose = false, marginLiquidate = false, marginForceClose = false } = {}) => {
     liquidateLogger.info('Liquidate Begin');
     const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, NearConfig } = nearObjects;
-
+    const signerString = JSON.stringify(await burrowContract.get_account({
+      account_id: NearConfig.accountId,
+    }));
+    if (signerString === 'null') {
+      liquidateLogger.error(`${NearConfig.accountId} has not registered ${NearConfig.burrowContractId}`);
+      return;
+    }
     const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
     const assets = rawAssets.reduce((assets, [assetId, asset]) => {
       assets[assetId] = parseAsset(asset);
@@ -146,206 +152,219 @@ module.exports = {
     const prices = burrow_config.enable_price_oracle ? await getPriceOralcePrices(priceOracleContract, assets) : await getPythPrices(account, burrowContract, pythOracleContract);
 
     if (liquidate || forceClose) {
-      await axios.get(`${NearConfig.dataServiceUrl}/get-liquidation-result?key=LiquidatableAccounts`)
-        .then(async response => {
-          const responseData = JSON.parse(response.data.data.values)
-          const timeDifference = Math.floor((new Date().getTime() - new Date(responseData.timestamp).getTime()) / 1000);
-          if (timeDifference <= 60) {
-            let lp_token_infos = await burrowContract.get_last_lp_token_infos();
-            for (var shadow_token_id in lp_token_infos) {
-              const pool_id = shadow_token_id.split("-")[1];
-              const unit_share_token_amounts = await refFinanceContract.get_unit_share_token_amounts({ pool_id: parseInt(pool_id) })
-              Object.entries(unit_share_token_amounts).forEach(([index, value]) => {
-                lp_token_infos[shadow_token_id].tokens[index]['real_amount'] = value
-              });
-            }
-
-            const signerString = JSON.stringify(await burrowContract.get_account({
-              account_id: NearConfig.accountId,
-            }));
-            const signerAccount = processAccount(
-              parseAccountDetailed(
-                keysToCamel(
-                  JSON.parse(signerString)
-                )
-              ),
-              assets,
-              prices
-            );
-            const maxLiquidationAmount = signerAccount.adjustedCollateralSum.sub(signerAccount.adjustedBorrowedSum);
-            if (maxLiquidationAmount.lte(Big(0))) {
-              liquidateLogger.error("signer account maxLiquidationAmount <= 0");
-              return;
-            }
-
-            if (signerAccount.healthFactor != undefined && signerAccount.healthFactor.lt(NearConfig.stopLiquidationHealthFactor)) {
-              liquidateLogger.error("signer account healthFactor is", signerAccount.healthFactor.toFixed(0), ", wait rebalance");
-              return;
-            }
-
-            const allAccounts = responseData.data
-              .map((a) => parseAccount(a))
-              .flat()
-              .map((a) => processAccount(a, assets, prices, lp_token_infos))
-              .filter((a) => !!a.healthFactor)
-              .filter(a => a.healthFactor.lt(1));
-
-            if (NearConfig.minAdjustGap.gt(Big(0))) {
-              allAccounts.sort((a, b) => {
-                return b.adjustedDebt.cmp(a.adjustedDebt);
-              });
-            } else {
-              allAccounts.sort((a, b) => {
-                return a.healthFactor.cmp(b.healthFactor);
-              });
-            }
-
-            const allAccountIds = [...new Set(allAccounts.slice(0, NearConfig.topN).map((item) => item.accountId))];
-            const promises = [];
-            for (const accountId of allAccountIds) {
-              promises.push(
-                promiseWithTimeout(burrowContract.get_account_all_positions({ "account_id": accountId }), 20000)
-              );
-            }
-
-            let accounts;
-            try {
-              accounts = (await Promise.all(promises))
-                .flat()
-                .map((a) => toAccount(a))
+      let accounts;
+      let lp_token_infos = await burrowContract.get_last_lp_token_infos();
+      for (var shadow_token_id in lp_token_infos) {
+        const pool_id = shadow_token_id.split("-")[1];
+        const unit_share_token_amounts = await refFinanceContract.get_unit_share_token_amounts({ pool_id: parseInt(pool_id) })
+        Object.entries(unit_share_token_amounts).forEach(([index, value]) => {
+          lp_token_infos[shadow_token_id].tokens[index]['real_amount'] = value
+        });
+      }
+      if (NearConfig.dataServiceUrl) {
+        await axios.get(NearConfig.dataServiceUrl)
+          .then(async response => {
+            const responseData = JSON.parse(response.data.data.values)
+            const timeDifference = Math.floor((new Date().getTime() - new Date(responseData.timestamp).getTime()) / 1000);
+            if (timeDifference <= 60) {
+              const allAccounts = responseData.data
                 .map((a) => parseAccount(a))
                 .flat()
                 .map((a) => processAccount(a, assets, prices, lp_token_infos))
                 .filter((a) => !!a.healthFactor)
                 .filter(a => a.healthFactor.lt(1));
-            } catch (error) {
-              console.error('get_account_all_positions error:', error)
-              return;
-            }
 
-            if (NearConfig.minAdjustGap.gt(Big(0))) {
-              accounts.sort((a, b) => {
-                return b.adjustedDebt.cmp(a.adjustedDebt);
-              });
+              if (NearConfig.minAdjustGap.gt(Big(0))) {
+                allAccounts.sort((a, b) => {
+                  return b.adjustedDebt.cmp(a.adjustedDebt);
+                });
+              } else {
+                allAccounts.sort((a, b) => {
+                  return a.healthFactor.cmp(b.healthFactor);
+                });
+              }
+
+              const allAccountIds = [...new Set(allAccounts.slice(0, NearConfig.topN).map((item) => item.accountId))];
+              const promises = [];
+              for (const accountId of allAccountIds) {
+                promises.push(
+                  promiseWithTimeout(burrowContract.get_account_all_positions({ "account_id": accountId }), 20000)
+                );
+              }
+              try {
+                accounts = (await Promise.all(promises))
+                  .flat()
+                  .map((a) => toAccount(a))
+                  .map((a) => parseAccount(a))
+                  .flat()
+                  .map((a) => processAccount(a, assets, prices, lp_token_infos))
+                  .filter((a) => !!a.healthFactor)
+                  .filter((a) => a.healthFactor.lt(1));
+              } catch (error) {
+                console.error('get_account_all_positions error:', error)
+                return;
+              }
             } else {
-              accounts.sort((a, b) => {
-                return a.healthFactor.cmp(b.healthFactor);
-              });
+              console.error("Liquidatable accounts data is too stale, generated ", timeDifference + "s ago");
             }
+          })
+          .catch(error => {
+            console.error("Get liquidatable accounts failed:", error);
+          });
+      } else {
+        const numAccountsStr = await burrowContract.get_num_accounts();
+        const numAccounts = parseInt(numAccountsStr);
+        liquidateLogger.debug('numAccounts:', numAccounts);
+        const limit = NearConfig.regularPagedLimit;
+        const promises = [];
+        for (let i = 0; i < numAccounts; i += limit) {
+          promises.push(
+            promiseWithTimeout(burrowContract.get_accounts_paged({ from_index: i, limit }), 20000)
+          );
+        }
+        accounts = (await Promise.all(promises))
+          .flat()
+          .map((a) => parseAccount(a))
+          .flat()
+          .map((a) => processAccount(a, assets, prices, lp_token_infos))
+          .filter((a) => !!a.healthFactor)
+          .filter((a) => a.healthFactor.lt(1));
+      }
 
-            let accountsWithDebt = accounts.filter((a) =>
-              a.discount.gte(NearConfig.minDiscount)
-            );
-
-            if (NearConfig.minAdjustGap.gt(Big(0))) {
-              accountsWithDebt = accountsWithDebt.filter((a) =>
-                a.adjustedDebt.gte(NearConfig.minAdjustGap)
-              );
-            }
-
-            liquidateLogger.debug(`Accounts with health less than 100 and discount greater than or equal to ${NearConfig.minDiscount}% and adjustedDebt greater than or equal to ${NearConfig.minAdjustGap}$, order by ${NearConfig.minAdjustGap.gt(Big(0)) ? 'adjustedDebt' : 'discount'}:`,
-              accountsWithDebt
-                .filter((a) => a.healthFactor.lt(2))
-                .map(
-                  (a) =>
-                    `${a.accountId} ${a.position}-> healthFactor: ${a.healthFactor
-                      .mul(100)
-                      .toFixed(2)}% -> discount: ${a.discount.mul(100).toFixed(2)}% -> borrowedSum: $${a.borrowedSum.toFixed()} -> adjustedDebt: $${a.adjustedDebt.toFixed(2)}`
-                )
-            );
-
-            let bestLiquidation = null;
-            if (liquidate) {
-              for (let i = 0; i < accountsWithDebt.length; ++i) {
-                if (accountsWithDebt[i].accountId == NearConfig.accountId) {
-                  continue;
-                }
-                const burrowAccount = processAccount(
-                  parseAccountDetailed(
-                    keysToCamel(
-                      JSON.parse(signerString)
-                    )
-                  ),
-                  assets,
-                  prices
-                );
-                const liquidation = computeLiquidation(
-                  accountsWithDebt[i],
-                  maxLiquidationAmount,
-                  NearConfig.maxWithdrawCount,
-                  burrowAccount
-                );
-                if (burrowAccount.healthFactor != undefined && burrowAccount.healthFactor.lt(Big(1))) {
-                  liquidateLogger.error("signer account not enough collateral");
-                  continue;
-                }
-                const { actions, totalPricedProfit, origDiscount, origHealth, health } =
-                  liquidation;
-                if (
-                  totalPricedProfit.lte(NearConfig.minProfit) ||
-                  origDiscount.lte(NearConfig.minDiscount) ||
-                  origHealth.gte(health)
-                ) {
-                  continue;
-                }
-                if (calcRealPricedProfit(actions, assets, prices, lp_token_infos).lte(NearConfig.minProfit)) {
-                  continue;
-                }
-                if (
-                  !bestLiquidation ||
-                  totalPricedProfit.gt(bestLiquidation.totalPricedProfit)
-                ) {
-                  bestLiquidation = liquidation;
-                }
-              }
-              if (bestLiquidation) {
-                liquidateLogger.debug("Executing liquidation");
-                liquidateLogger.debug("actions: ", JSON.stringify(bestLiquidation.actions));
-                try {
-                  const outcome = burrow_config.enable_price_oracle ?
-                    await execute_with_price_oracle(account, NearConfig, bestLiquidation.actions) :
-                    await execute_with_pyth_oracle(account, NearConfig, bestLiquidation.actions);
-                  printOutcome("normal liquidation", "./logs/liquidation_success.log", outcome);
-                } catch (Error) {
-                  liquidateLogger.error("Error: ", Error)
-                }
-              }
-            }
-            if (forceClose) {
-              for (let i = 0; i < accountsWithDebt.length; ++i) {
-                const accountDetail = accountsWithDebt[i];
-                if (accountDetail.collateralSum.lt(accountDetail.borrowedSum)) {
-                  liquidateLogger.debug("Executing force closing of account", accountDetail.accountId);
-                  const actions = [
-                    {
-                      ForceClose: {
-                        account_id: accountDetail.accountId,
-                        position: accountDetail.position ? accountDetail.position : null,
-                        min_token_amounts: accountDetail.position == "REGULAR" ? null : new Array(accountDetail.collateral[0].unit_share_tokens.tokens.length).fill("0")
-                      },
-                    },
-                  ];
-                  liquidateLogger.debug("actions: ", JSON.stringify(actions));
-
-                  try {
-                    const outcome = burrow_config.enable_price_oracle ?
-                      await execute_with_price_oracle(account, NearConfig, actions) :
-                      await execute_with_pyth_oracle(account, NearConfig, actions);
-                    printOutcome("normal force_close", "./logs/force_close_success.log", outcome);
-                  } catch (Error) {
-                    liquidateLogger.error("Error: ", Error)
-                  }
-                  break;
-                }
-              }
-            }
-          } else {
-            console.error("Liquidatable accounts data is too stale, generated ", timeDifference + "s ago");
-          }
-        })
-        .catch(error => {
-          console.error("Get liquidatable accounts failed:", error);
+      if (NearConfig.minAdjustGap.gt(Big(0))) {
+        accounts.sort((a, b) => {
+          return b.adjustedDebt.cmp(a.adjustedDebt);
         });
+      } else {
+        accounts.sort((a, b) => {
+          return a.healthFactor.cmp(b.healthFactor);
+        });
+      }
+
+      let accountsWithDebt = accounts.filter((a) =>
+        a.discount.gte(NearConfig.minDiscount)
+      );
+
+      if (NearConfig.minAdjustGap.gt(Big(0))) {
+        accountsWithDebt = accountsWithDebt.filter((a) =>
+          a.adjustedDebt.gte(NearConfig.minAdjustGap)
+        );
+      }
+
+      liquidateLogger.debug(`Accounts with health less than 100 and discount greater than or equal to ${NearConfig.minDiscount}% and adjustedDebt greater than or equal to ${NearConfig.minAdjustGap}$, order by ${NearConfig.minAdjustGap.gt(Big(0)) ? 'adjustedDebt' : 'discount'}:`,
+        accountsWithDebt
+          .filter((a) => a.healthFactor.lt(2))
+          .map(
+            (a) =>
+              `${a.accountId} ${a.position}-> healthFactor: ${a.healthFactor
+                .mul(100)
+                .toFixed(2)}% -> discount: ${a.discount.mul(100).toFixed(2)}% -> borrowedSum: $${a.borrowedSum.toFixed()} -> adjustedDebt: $${a.adjustedDebt.toFixed(2)}`
+          )
+      );
+
+      let bestLiquidation = null;
+      if (liquidate) {
+        const signerAccount = processAccount(
+          parseAccountDetailed(
+            keysToCamel(
+              JSON.parse(signerString)
+            )
+          ),
+          assets,
+          prices
+        );
+        const maxLiquidationAmount = signerAccount.adjustedCollateralSum.sub(signerAccount.adjustedBorrowedSum);
+        if (maxLiquidationAmount.lte(Big(0))) {
+          liquidateLogger.error("signer account maxLiquidationAmount <= 0");
+          return;
+        }
+        if (signerAccount.healthFactor != undefined && signerAccount.healthFactor.lt(NearConfig.stopLiquidationHealthFactor)) {
+          liquidateLogger.error("signer account healthFactor is", signerAccount.healthFactor.toFixed(0), ", wait rebalance");
+          return;
+        }
+        for (let i = 0; i < accountsWithDebt.length; ++i) {
+          if (accountsWithDebt[i].accountId == NearConfig.accountId) {
+            continue;
+          }
+          const burrowAccount = processAccount(
+            parseAccountDetailed(
+              keysToCamel(
+                JSON.parse(signerString)
+              )
+            ),
+            assets,
+            prices
+          );
+          const liquidation = computeLiquidation(
+            accountsWithDebt[i],
+            maxLiquidationAmount,
+            NearConfig.maxWithdrawCount,
+            burrowAccount
+          );
+          if (burrowAccount.healthFactor != undefined && burrowAccount.healthFactor.lt(Big(1))) {
+            liquidateLogger.error("signer account not enough collateral");
+            continue;
+          }
+          const { actions, totalPricedProfit, origDiscount, origHealth, health } =
+            liquidation;
+          if (
+            totalPricedProfit.lte(NearConfig.minProfit) ||
+            origDiscount.lte(NearConfig.minDiscount) ||
+            origHealth.gte(health)
+          ) {
+            continue;
+          }
+          if (calcRealPricedProfit(actions, assets, prices, lp_token_infos).lte(NearConfig.minProfit)) {
+            continue;
+          }
+          if (
+            !bestLiquidation ||
+            totalPricedProfit.gt(bestLiquidation.totalPricedProfit)
+          ) {
+            bestLiquidation = liquidation;
+          }
+        }
+        if (bestLiquidation) {
+          liquidateLogger.debug("Executing liquidation");
+          liquidateLogger.debug("actions: ", JSON.stringify(bestLiquidation.actions));
+          try {
+            const outcome = burrow_config.enable_price_oracle ?
+              await execute_with_price_oracle(account, NearConfig, bestLiquidation.actions) :
+              await execute_with_pyth_oracle(account, NearConfig, bestLiquidation.actions);
+            printOutcome("normal liquidation", "./logs/liquidation_success.log", outcome);
+          } catch (Error) {
+            liquidateLogger.error("Error: ", Error)
+          }
+        }
+      }
+      if (forceClose) {
+        for (let i = 0; i < accountsWithDebt.length; ++i) {
+          const accountDetail = accountsWithDebt[i];
+          if (accountDetail.collateralSum.lt(accountDetail.borrowedSum)) {
+            liquidateLogger.debug("Executing force closing of account", accountDetail.accountId);
+            const actions = [
+              {
+                ForceClose: {
+                  account_id: accountDetail.accountId,
+                  position: accountDetail.position ? accountDetail.position : null,
+                  min_token_amounts: accountDetail.position == "REGULAR" ? null : new Array(accountDetail.collateral[0].unit_share_tokens.tokens.length).fill("0")
+                },
+              },
+            ];
+            liquidateLogger.debug("actions: ", JSON.stringify(actions));
+
+            try {
+              const outcome = burrow_config.enable_price_oracle ?
+                await execute_with_price_oracle(account, NearConfig, actions) :
+                await execute_with_pyth_oracle(account, NearConfig, actions);
+              printOutcome("normal force_close", "./logs/force_close_success.log", outcome);
+            } catch (Error) {
+              liquidateLogger.error("Error: ", Error)
+            }
+            break;
+          }
+        }
+      }
     }
     if (marginLiquidate || marginForceClose) {
       await check_margin_position(account, burrow_config, NearConfig, burrowContract, assets, prices, marginLiquidate, marginForceClose)
