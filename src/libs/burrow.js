@@ -79,7 +79,10 @@ const getPythPrices = async (account, burrowContract, pythOracleContract) => {
           "decimals": pythInfo.fraction_digits + pythInfo.decimals
         };
       } else {
-        let price = await account.viewFunction(assetId, pythInfo.extra_call, {});
+        let price = await account.viewFunction({
+          contractId: assetId, 
+          methodName: pythInfo.extra_call
+        });
         prices[assetId] = {
           "multiplier": Big(pythPrice.price).mul(Big(10).pow(pythPrice.expo)).mul(Big(price)).div(Big(10).pow(24)).mul(Big(10).pow(pythInfo.fraction_digits)).round(0),
           "decimals": pythInfo.fraction_digits + pythInfo.decimals
