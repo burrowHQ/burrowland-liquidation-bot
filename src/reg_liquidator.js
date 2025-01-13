@@ -57,8 +57,8 @@ async function main(nearObjects) {
   const rawAssets = await burrowContract.get_assets_paged();
   for (let i = 0; i < rawAssets.length; ++i) {
     const tokenId = rawAssets[i][0]
-    console.log('check', tokenId)
-    if (tokenId.substring(0, 14) != "shadow_ref_v1-") {
+    if (tokenId.substring(0, 14) != "shadow_ref_v1-" && (rawAssets[i][1]['config']['can_use_as_collateral'] == true || rawAssets[i][1]['config']['can_borrow'] == true)) {
+      console.log('check', tokenId)
       const token = tokenContract(tokenId);
       const storageBalance = await token.storage_balance_of({
         account_id: NearConfig.accountId,
@@ -75,6 +75,8 @@ async function main(nearObjects) {
           "attachedDeposit": Big(10).pow(23).toFixed(0),
         });
       }
+    } else {
+      console.log('skip', tokenId)
     }
   }
 
