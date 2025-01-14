@@ -9,14 +9,14 @@ async function main(nearObjects) {
 
 
   // try to read liquidator account from burrowland
-  const burrowAccount = await burrowContract.get_account({ account_id: NearConfig.accountId })
+  const burrowAccount = await burrowContract.get_account({ account_id: process.env.TARGET_NEAR_ACCOUNT_ID })
   if (burrowAccount == null) {
     console.log(`Paying storage for burrowContract`);
     await account.functionCall({
       "contractId": NearConfig.burrowContractId,
       "methodName": "storage_deposit",
       "args": {
-        account_id: NearConfig.accountId,
+        account_id: process.env.TARGET_NEAR_ACCOUNT_ID,
         registration_only: true,
       },
       "gas": Big(10).pow(12).mul(300).toFixed(0),
@@ -31,7 +31,7 @@ async function main(nearObjects) {
     "contractId": NearConfig.refFinanceContractId,
     "methodName": "get_account_basic_info",
     "args": {
-      "account_id": NearConfig.accountId,
+      "account_id": process.env.TARGET_NEAR_ACCOUNT_ID,
     }
   });
   if (refFinanceAccount == null) {
@@ -41,7 +41,7 @@ async function main(nearObjects) {
       "contractId": NearConfig.refFinanceContractId,
       "methodName": "storage_deposit",
       "args": {
-        account_id: NearConfig.accountId,
+        account_id: process.env.TARGET_NEAR_ACCOUNT_ID,
         registration_only: true,
       },
       "gas": Big(10).pow(12).mul(300).toFixed(0),
@@ -61,7 +61,7 @@ async function main(nearObjects) {
       console.log('check', tokenId)
       const token = tokenContract(tokenId);
       const storageBalance = await token.storage_balance_of({
-        account_id: NearConfig.accountId,
+        account_id: process.env.TARGET_NEAR_ACCOUNT_ID,
       });
       if (Big(storageBalance?.total || 0).eq(0)) {
         console.log(`Paying storage for ${tokenId}\n`);
@@ -69,6 +69,7 @@ async function main(nearObjects) {
           "contractId": tokenId,
           "methodName": "storage_deposit",
           "args": {
+            account_id: process.env.TARGET_NEAR_ACCOUNT_ID,
             registration_only: true,
           },
           "gas": Big(10).pow(12).mul(300).toFixed(0),
@@ -82,7 +83,7 @@ async function main(nearObjects) {
 
 }
 
-initNear(true, process.env.KEY_PATH || null).then((nearObject) =>
+initNear(true).then((nearObject) =>
   main(nearObject)
 );
 
