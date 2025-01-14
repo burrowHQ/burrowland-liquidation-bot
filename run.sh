@@ -20,6 +20,7 @@ export TOPN=20
 # export MARGIN_TOPN=20
 export REGULAR_PAGED_LIMIT=150
 export MARGIN_PAGED_LIMIT=150
+export MARGIN_ROUTER_FILE=margin_router.json
 
 cd $(dirname "$0")
 DATE=$(date "+%Y_%m_%d")

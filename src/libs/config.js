@@ -1,26 +1,28 @@
 const Big = require("big.js");
+const fs = require('fs');
 
-const generateMarginRouterV1 = (dex_id, details) => {
-  const actions = details.map(([pool_id, token_in, token_out]) => {
-    return {
-      pool_id,
-      token_in,
-      token_out,
-      min_amount_out: '0',
-    }
-  });
-  return {
-    dex_id,
-    dex_type: 1,
-    actions,
-  }
-}
-
-const generateMarginRouterV2 = (dex_id, pool_ids) => {
-  return {
-    dex_id,
-    dex_type: 2,
-    pool_ids,
+const readMarginRouter = () => {
+  if (process.env.MARGIN_ROUTER_FILE) {
+    const filePath = `./${process.env.MARGIN_ROUTER_FILE}`;
+    const data = fs.readFileSync(filePath, 'utf-8');
+    return Object.entries(JSON.parse(data)).reduce((acc, [key, value]) => {
+      acc[key] = value['dex_type'] == 1 ? {
+        dex_type: 1,
+        dex_id: value['dex_id'],
+        actions: value['pool_ids'].map((pool) => {
+          const [pool_id, token_in, token_out] = pool.split('|');
+          return {
+            pool_id,
+            token_in,
+            token_out,
+            min_amount_out: '0',
+          }
+        })
+      } : value;
+      return acc;
+    }, {});
+  } else {
+    return {};
   }
 }
 
@@ -57,20 +59,6 @@ module.exports = {
             burrowContractId: process.env.BURROW_CONTRACT_ID || "dev-1707132736890-13749887598327",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
-            marginRouter: {
-              // "usdt.fakes.testnet&dai.fakes.testnet": {
-              //   dex_id: "dev-1707134085683-95275841586061",
-              //   dex_type: 1,
-              //   pool_id: 0
-              // },
-              // "dai.fakes.testnet&usdt.fakes.testnet": {
-              //   dex_id: "dev-1707134085683-95275841586061",
-              //   dex_type: 1,
-              //   pool_id: 0
-              // },
-              "usdt.fakes.testnet&dai.fakes.testnet": generateMarginRouterV2("dev-1707136746796-79997967772528", ["dai.fakes.testnet|usdt.fakes.testnet|100"]),
-              "dai.fakes.testnet&usdt.fakes.testnet": generateMarginRouterV2("dev-1707136746796-79997967772528", ["dai.fakes.testnet|usdt.fakes.testnet|100"]),
-            },
           };
         case "testnet_dev":
           return {
@@ -85,103 +73,6 @@ module.exports = {
             burrowContractId: process.env.BURROW_CONTRACT_ID || "contract.dev-burrow.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
-            marginRouter: {
-              "wrap.testnet&usdcc.ft.ref-labs.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [758, 'wrap.testnet', 'usdcc.ft.ref-labs.testnet'],
-                ]),
-              "usdcc.ft.ref-labs.testnet&wrap.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [758, 'usdcc.ft.ref-labs.testnet', 'wrap.testnet'], 
-                ]),
-              // "wrap.testnet&usdcc.ft.ref-labs.testnet": generateMarginRouterV2("refv2-dev.ref-dev.testnet", ["usdcc.ft.ref-labs.testnet|wrap.testnet|400"]),
-              // "usdcc.ft.ref-labs.testnet&wrap.testnet": generateMarginRouterV2("refv2-dev.ref-dev.testnet", ["usdcc.ft.ref-labs.testnet|wrap.testnet|400"]),
-              "wrap.testnet&usdte.ft.ref-labs.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [726, 'wrap.testnet', 'usdte.ft.ref-labs.testnet'],
-                ]),
-              "usdte.ft.ref-labs.testnet&wrap.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [726, 'usdte.ft.ref-labs.testnet', 'wrap.testnet'], 
-                ]),
-              "usdte.ft.ref-labs.testnet&token.dev-burrow.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [726, 'usdte.ft.ref-labs.testnet', 'wrap.testnet'], 
-                  [759, 'wrap.testnet', 'token.dev-burrow.testnet'],
-                ]),
-              "token.dev-burrow.testnet&usdte.ft.ref-labs.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [759, 'token.dev-burrow.testnet', 'wrap.testnet'],
-                  [726, 'wrap.testnet', 'usdte.ft.ref-labs.testnet'], 
-                ]),
-              "usdte.ft.ref-labs.testnet&willa.fakes.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [726, 'usdte.ft.ref-labs.testnet', 'wrap.testnet'], 
-                  [459, 'wrap.testnet', 'willa.fakes.testnet'],
-                ]),
-              "willa.fakes.testnet&usdte.ft.ref-labs.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [459, 'willa.fakes.testnet', 'wrap.testnet'],
-                  [726, 'wrap.testnet', 'usdte.ft.ref-labs.testnet'], 
-                ]),
-              "usdte.ft.ref-labs.testnet&lonk.fakes.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [726, 'usdte.ft.ref-labs.testnet', 'wrap.testnet'], 
-                  [716, 'wrap.testnet', 'lonk.fakes.testnet'],
-                ]),
-              "lonk.fakes.testnet&usdte.ft.ref-labs.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [716, 'lonk.fakes.testnet', 'wrap.testnet'],
-                  [726, 'wrap.testnet', 'usdte.ft.ref-labs.testnet'], 
-                ]),
-
-              "usdce.ft.ref-labs.testnet&token.dev-burrow.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [725, 'usdce.ft.ref-labs.testnet', 'wrap.testnet'], 
-                  [759, 'wrap.testnet', 'token.dev-burrow.testnet'],
-                ]),
-              "token.dev-burrow.testnet&usdce.ft.ref-labs.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [759, 'token.dev-burrow.testnet', 'wrap.testnet'],
-                  [725, 'wrap.testnet', 'usdce.ft.ref-labs.testnet'], 
-                ]),
-              "usdce.ft.ref-labs.testnet&willa.fakes.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [725, 'usdce.ft.ref-labs.testnet', 'wrap.testnet'], 
-                  [459, 'wrap.testnet', 'willa.fakes.testnet'],
-                ]),
-              "willa.fakes.testnet&usdce.ft.ref-labs.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [459, 'willa.fakes.testnet', 'wrap.testnet'],
-                  [725, 'wrap.testnet', 'usdce.ft.ref-labs.testnet'], 
-                ]),
-              "usdce.ft.ref-labs.testnet&lonk.fakes.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [725, 'usdce.ft.ref-labs.testnet', 'wrap.testnet'], 
-                  [716, 'wrap.testnet', 'lonk.fakes.testnet'],
-                ]),
-              "lonk.fakes.testnet&usdce.ft.ref-labs.testnet": generateMarginRouterV1(
-                "exchange.ref-dev.testnet",
-                [
-                  [716, 'lonk.fakes.testnet', 'wrap.testnet'],
-                  [725, 'wrap.testnet', 'usdce.ft.ref-labs.testnet'], 
-                ]),
-            },
           };
         case "testnet_public":
           return {
@@ -232,6 +123,8 @@ module.exports = {
     config.marginDataServiceUrl = process.env.MARGIN_DATA_SERVICE_URL;
     config.marginTopN = process.env.MARGIN_TOPN || 50;
     config.marginPagedLimit = parseInt(process.env.MARGIN_PAGED_LIMIT) || 150;
+    config.marginRouter = readMarginRouter();
+    console.log(JSON.stringify(config.marginRouter, undefined, 2))
 
     // rebalance
     config.minSwapAmount = Big(process.env.MIN_SWAP_AMOUNT || "1");
