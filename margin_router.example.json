@@ -1,0 +1,35 @@
+{
+    "//1": "for liquidating a short position",
+    "quotetoken1.testnet&basetoken1.testnet": {
+      "//2": "dex_type set to 1 when dex is ref-v1",
+      "dex_type": 1,
+      "dex_id": "ref-exchange.testnet",
+      "//3": "swap router, format: [pool_id|token_in|token_out, ...]",
+      "pool_ids": [
+        "101|quotetoken1.testnet|anothertoken.testnet",
+        "202|anothertoken.testnet|basetoken1.testnet"
+      ]
+    },
+    "//4": "for liquidating a long position",
+    "basetoken1.testnet&quotetoken1.testnet": {
+      "dex_type": 1,
+      "dex_id": "ref-exchange.testnet",
+      "pool_ids": [
+        "202|basetoken1.testnet|anothertoken.testnet",
+        "101|anothertoken.testnet|quotetoken1.testnet"
+      ]
+    },
+  
+    "quotetoken2.testnet&basetoken2.testnet": {
+      "//5": "dex_type set to 2 when dex is ref-dcl",
+      "dex_type": 2,
+      "dex_id": "ref-dcl.testnet",
+      "//6": "swap router, format: [poolid1, poolid2, ...]",
+      "pool_ids": ["basetoken2.testnet|quotetoken2.testnet|400"]
+    },
+    "basetoken2.testnet&quotetoken2.testnet": {
+      "dex_type": 2,
+      "dex_id": "ref-dcl.testnet",
+      "pool_ids": ["basetoken2.testnet|quotetoken2.testnet|400"]
+    }
+  }
