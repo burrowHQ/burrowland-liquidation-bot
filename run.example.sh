@@ -44,7 +44,7 @@ export LIQUIDATE=true
 
 # default to 0, filter out all debt that less than $5 adjusted_gap,
 # Note: must set to 0 if switch on FORCE_CLOSE
-export MIN_ADJUSTGAP=5
+export MIN_ADJUSTGAP=0
 
 # default to 0.025, filter out those HF greater than (1-0.025*2)
 export MIN_DISCOUNT=0.025
