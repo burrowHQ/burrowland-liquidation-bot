@@ -2,6 +2,8 @@
 
 mkdir -p logs
 
+
+######## COMMON CONFIG SECTION ########
 export NEAR_ENV=testnet
 
 # uncomment this if you want to cover default value
@@ -19,7 +21,6 @@ export NEAR_ENV=testnet
 # must provide the liqudiator account ID
 export NEAR_ACCOUNT_ID=your_liquidator_id.testnet
 
-
 # default to info
 export LOG_LEVEL=debug
 
@@ -30,10 +31,14 @@ export LOOP_INTERVAL=60000
 # export ENCODE_PRIVATE_KEY=
 
 
-# default to 1, 
+######## REBALANCE SECTION ########
+# default to 1, means:
+# - withdraw a token from burrow if market value greater than $1,
+# - sell to wnear if a wallet token's market value is greater than $1,
+# - buy and repay a token's debt if the debt's market value is greater than $1.
 export MIN_SWAP_AMOUNT=1
 
-# default to 0.5, 
+# default to 0.5, define the minimum repay value for any single debt token.
 export MIN_REPAY_AMOUNT=0.5
 
 # default to 0.5, means a slippage of 0.5%
