@@ -12,7 +12,7 @@ const readMarginRouter = () => {
         actions: value['pool_ids'].map((pool) => {
           const [pool_id, token_in, token_out] = pool.split('|');
           return {
-            pool_id,
+            pool_id: parseInt(pool_id),
             token_in,
             token_out,
             min_amount_out: '0',
