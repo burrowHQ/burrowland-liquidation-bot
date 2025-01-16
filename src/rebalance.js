@@ -3,7 +3,7 @@ const { initNear } = require("./libs/near");
 const Big = require("big.js");
 const { keysToCamel, bigMin } = require("./libs/utils");
 const { parseAsset } = require("./libs/asset");
-const { parsePriceData } = require("./libs/priceData");
+const { getPythPrices, getPriceOralcePrices } = require("./libs/priceData");
 const { parseAccountDetailed, processAccount } = require("./libs/account");
 const { refSell, refBuy } = require("./libs/refExchange");
 
@@ -14,7 +14,7 @@ Big.DP = 27;
 
 async function main(nearObjects, rebalance) {
   rebalanceLogger.info('Rebalance Begin');
-  const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, NearConfig } =
+  const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, pythOracleContract, NearConfig } =
     nearObjects;
 
   const burrowContractAccount = await burrowContract.get_account({
@@ -31,13 +31,8 @@ async function main(nearObjects, rebalance) {
     return assets;
   }, {});
 
-  const prices = parsePriceData(
-    keysToCamel(
-      await priceOracleContract.get_price_data({
-        asset_ids: Object.keys(assets),
-      })
-    )
-  );
+  const burrow_config = await burrowContract.get_config();
+  const prices = burrow_config.enable_price_oracle ? await getPriceOralcePrices(priceOracleContract, assets) : await getPythPrices(account, burrowContract, pythOracleContract);
 
   const burrowAccount = processAccount(
     parseAccountDetailed(

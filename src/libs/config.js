@@ -124,7 +124,7 @@ module.exports = {
     config.marginTopN = process.env.MARGIN_TOPN || 50;
     config.marginPagedLimit = parseInt(process.env.MARGIN_PAGED_LIMIT) || 150;
     config.marginRouter = readMarginRouter();
-    console.log(JSON.stringify(config.marginRouter, undefined, 2))
+    // console.log(JSON.stringify(config.marginRouter, undefined, 2))
 
     // rebalance
     config.minSwapAmount = Big(process.env.MIN_SWAP_AMOUNT || "1");
