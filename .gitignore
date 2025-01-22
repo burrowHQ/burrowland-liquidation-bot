@@ -67,3 +67,7 @@ __pycache__/
 
 
 test_*
+
+run.sh
+rebalance.sh
+reg_liquidator.sh
