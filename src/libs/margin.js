@@ -107,7 +107,7 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
       }
 
       if (a.is_forceclose) {
-        a.lose = total_debt.sub(total_cap);
+        a.loss = total_debt.sub(total_cap);
         a.actions = [{ ForceCloseMTPosition: args }];
       }
     } else {
@@ -216,12 +216,14 @@ module.exports = {
 
     if (marginForceClose && forcecloseAccounts.length > 0) {
       try {
-        liquidateLogger.debug("forceclose action:");
-        liquidateLogger.debug(JSON.stringify(forcecloseAccounts[0].actions, undefined, 2));
-        const outcome = burrow_config.enable_price_oracle ?
-          await margin_execute_with_price_oracle(account, NearConfig, forcecloseAccounts[0].actions) :
-          await margin_execute_with_pyth_oracle(account, NearConfig, forcecloseAccounts[0].actions);
-        printOutcome("margin force_close", "./logs/margin_force_close_success.log", outcome)
+        if (forcecloseAccounts[0].loss.gte(NearConfig.marginForceCloseMinLoss)) {
+          liquidateLogger.debug("forceclose action:");
+          liquidateLogger.debug(JSON.stringify(forcecloseAccounts[0].actions, undefined, 2));
+          const outcome = burrow_config.enable_price_oracle ?
+            await margin_execute_with_price_oracle(account, NearConfig, forcecloseAccounts[0].actions) :
+            await margin_execute_with_pyth_oracle(account, NearConfig, forcecloseAccounts[0].actions);
+          printOutcome("margin force_close", "./logs/margin_force_close_success.log", outcome)
+        }
       }
       catch (Error) {
         liquidateLogger.error("Error: ", Error)

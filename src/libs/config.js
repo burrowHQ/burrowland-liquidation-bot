@@ -120,6 +120,7 @@ module.exports = {
     // margin
     config.marginLiquidate = process.env.MARGIN_LIQUIDATE == 'true' || false;
     config.marginForceClose = process.env.MARGIN_FORCE_CLOSE == 'true' || false;
+    config.marginForceCloseMinLoss = Big(process.env.MARGIN_FORCE_CLOSE_MIN_LOSS || "1");
     config.marginDataServiceUrl = process.env.MARGIN_DATA_SERVICE_URL;
     config.marginTopN = process.env.MARGIN_TOPN || 50;
     config.marginPagedLimit = parseInt(process.env.MARGIN_PAGED_LIMIT) || 150;
