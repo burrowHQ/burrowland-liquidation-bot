@@ -195,7 +195,7 @@ module.exports = {
       return b.profit.cmp(a.profit);
     })
     forcecloseAccounts.sort((a, b) => {
-      return b.lose.cmp(a.lose);
+      return b.loss.cmp(a.loss);
     })
 
     if (marginLiquidate && liquidationAccounts.length > 0) {
