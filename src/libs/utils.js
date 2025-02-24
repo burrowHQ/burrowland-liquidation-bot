@@ -108,6 +108,27 @@ const printOutcome = (prefix, filePath, outcome) => {
   }
 }
 
+const getRefExchangeSwapMsg = async (smartrouterUrl, amountIn, tokenIn, tokenOut, slippage=0.005, pathDeep=3, routerCount=2) => {
+  const url = `${smartrouterUrl}/swapPath?amountIn=${amountIn}&tokenIn=${tokenIn}&tokenOut=${tokenOut}&pathDeep=${pathDeep}&slippage=${slippage}&routerCount=${routerCount}`;
+  const response = await fetch(url);
+  const responseJson = await response.json();
+  if (responseJson.result_data.args.amount == amountIn) {
+    return responseJson.result_data.args.msg
+  } else {
+    return ""
+  }
+}
+
+const getSwapActionsMinAmountOut = (actions, targetTokenId) => {
+  let amountOut = Big(0);
+  for (let i = 0; i < actions.length; i++) {
+    if (actions[i].token_out == targetTokenId) {
+      amountOut = amountOut.add(Big(actions[i].min_amount_out));
+    }
+  }
+  return amountOut;
+}
+
 module.exports = {
   bigMin,
   keysToCamel,
@@ -119,5 +140,7 @@ module.exports = {
   sleep,
   PYTH_STALENESS_THRESHOLD,
   decryptAES,
-  printOutcome
+  printOutcome,
+  getRefExchangeSwapMsg,
+  getSwapActionsMinAmountOut,
 };

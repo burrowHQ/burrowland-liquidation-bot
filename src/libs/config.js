@@ -1,31 +1,6 @@
 const Big = require("big.js");
 const fs = require('fs');
 
-const readMarginRouter = () => {
-  if (process.env.MARGIN_ROUTER_FILE) {
-    const filePath = `./${process.env.MARGIN_ROUTER_FILE}`;
-    const data = fs.readFileSync(filePath, 'utf-8');
-    return Object.entries(JSON.parse(data)).reduce((acc, [key, value]) => {
-      acc[key] = value['dex_type'] == 1 ? {
-        dex_type: 1,
-        dex_id: value['dex_id'],
-        actions: value['pool_ids'].map((pool) => {
-          const [pool_id, token_in, token_out] = pool.split('|');
-          return {
-            pool_id: parseInt(pool_id),
-            token_in,
-            token_out,
-            min_amount_out: '0',
-          }
-        })
-      } : value;
-      return acc;
-    }, {});
-  } else {
-    return {};
-  }
-}
-
 module.exports = {
   getConfig: (env) => {
     const config = (() => {
@@ -44,6 +19,7 @@ module.exports = {
             burrowContractId: process.env.BURROW_CONTRACT_ID || "contract.main.burrow.near",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.near",
+            smartrouterUrl: "https://smartrouter.ref.finance",
           };
         case "development":
           return {
@@ -59,6 +35,7 @@ module.exports = {
             burrowContractId: process.env.BURROW_CONTRACT_ID || "dev-1707132736890-13749887598327",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
+            smartrouterUrl: "https://smartrouterdev.refburrow.top",
           };
         case "testnet_dev":
           return {
@@ -73,6 +50,7 @@ module.exports = {
             burrowContractId: process.env.BURROW_CONTRACT_ID || "contract.dev-burrow.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
+            smartrouterUrl: "https://smartrouterdev.refburrow.top",
           };
         case "testnet_public":
           return {
@@ -87,6 +65,7 @@ module.exports = {
             burrowContractId: process.env.BURROW_CONTRACT_ID || "burrow.services.ref-labs.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
+            smartrouterUrl: "https://smartroutertest.refburrow.top",
           };
         default:
           throw Error(
@@ -119,13 +98,12 @@ module.exports = {
 
     // margin
     config.marginLiquidate = process.env.MARGIN_LIQUIDATE == 'true' || false;
+    config.marginLiquidateDirectMode = process.env.MARGIN_LIQUIDATE_DIRECT_MODE == 'true' || false;
     config.marginForceClose = process.env.MARGIN_FORCE_CLOSE == 'true' || false;
     config.marginForceCloseMinLoss = Big(process.env.MARGIN_FORCE_CLOSE_MIN_LOSS || "1");
     config.marginDataServiceUrl = process.env.MARGIN_DATA_SERVICE_URL;
     config.marginTopN = process.env.MARGIN_TOPN || 50;
     config.marginPagedLimit = parseInt(process.env.MARGIN_PAGED_LIMIT) || 150;
-    config.marginRouter = readMarginRouter();
-    // console.log(JSON.stringify(config.marginRouter, undefined, 2))
 
     // rebalance
     config.minSwapAmount = Big(process.env.MIN_SWAP_AMOUNT || "1");

@@ -72,11 +72,10 @@ export REGULAR_PAGED_LIMIT=150
 ######## MARGIN POSITIONS SECTION ########
 # default to false, switch of liquidation for margin positions
 export MARGIN_LIQUIDATE=false
+# default to false, switch of direct liquidation for margin positions
+# export MARGIN_LIQUIDATE_DIRECT_MODE = true
 # default to false, switch of forcing close for margin positions
 export MARGIN_FORCE_CLOSE=false
-
-# default to null, if MARGIN_LIQUIDATE or MARGIN_FORCE_CLOSE is true, must have a valid router file.
-export MARGIN_ROUTER_FILE=margin_router.json
 
 # uncomment this if using a service to provide margin positions
 # export MARGIN_DATA_SERVICE_URL=

@@ -1,5 +1,5 @@
 const Big = require("big.js");
-const { parseRatio, printOutcome } = require("./utils");
+const { parseRatio, printOutcome, getRefExchangeSwapMsg, getSwapActionsMinAmountOut } = require("./utils");
 const log4js = require('log4js');
 
 const liquidateLogger = log4js.getLogger();
@@ -38,7 +38,8 @@ const updateActions = (actions, amount_in, min_amount_out) => {
   return newActions
 }
 
-const processAccount = (a, assets, prices, NearConfig, margin_config) => {
+const processAccount = async (a, assets, prices, NearConfig, margin_config) => {
+  // const baseTokenId = a.token_c_info.token_id == a.token_d_info.token_id ? a.token_p_id : a.token_d_info.token_id;
   a.c_asset = assets[a.token_c_info.token_id];
   a.d_asset = assets[a.token_d_info.token_id];
   a.p_asset = assets[a.token_p_id];
@@ -65,44 +66,44 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
   a.actions = null;
 
   if (a.is_liquidation || a.is_forceclose) {
-    const routerId = a.token_p_id + "&" + a.token_d_info.token_id;
-    const token_p_amount_arg = a.token_c_info.token_id == a.token_d_info.token_id ? a.token_p_amount : a.token_p_amount.add(a.token_c_info.balance);
-    const min_token_d_amount_arg = a.token_c_info.token_id == a.token_d_info.token_id ?
-      a.token_p_price_balance.mul(Big(10).pow(a.d_price.decimals + a.d_asset.config.extraDecimals)).mul(Big(0.99)).div(a.d_price.multiplier).round(0, 0) :
-      a.token_p_price_balance.add(a.token_c_price_balance).mul(Big(10).pow(a.d_price.decimals + a.d_asset.config.extraDecimals)).mul(Big(0.99)).div(a.d_price.multiplier).round(0, 0);
-    if (NearConfig.marginRouter[routerId]) {
+    const tokenPAmountBD = a.token_c_info.token_id == a.token_d_info.token_id ? a.token_p_amount : a.token_p_amount.add(a.token_c_info.balance);
+    const tokenPAmountSTDD = tokenPAmountBD.div(Big(10).pow(a.p_asset.config.extraDecimals)).round(0, 0);
+    const swapMsg = await getRefExchangeSwapMsg(NearConfig.smartrouterUrl, tokenPAmountSTDD.toFixed(), a.token_p_id, a.token_d_info.token_id, NearConfig.maxSlippage.div(100).toFixed());
+    if (swapMsg != "") {
+      const tokenDAmountSTDD = getSwapActionsMinAmountOut(JSON.parse(swapMsg).actions, a.token_d_info.token_id);
+      const tokenDAmountBD = tokenDAmountSTDD.mul(Big(10).pow(a.d_asset.config.extraDecimals)).round(0, 0);
       const args = {
         pos_owner_id: a.accountId,
         pos_id: a.position,
-        token_p_amount: token_p_amount_arg.toFixed(0),
-        min_token_d_amount: min_token_d_amount_arg.toFixed(0),
+        token_p_amount: tokenPAmountBD.toFixed(0),
+        min_token_d_amount: tokenDAmountBD.toFixed(0),
         swap_indication: {
-          dex_id: NearConfig.marginRouter[routerId].dex_id,
-          swap_action_text: NearConfig.marginRouter[routerId].dex_type == 1 ? JSON.stringify({
-            actions: updateActions(
-              NearConfig.marginRouter[routerId].actions,
-              token_p_amount_arg.div(Big(10).pow(a.p_asset.config.extraDecimals)).round(0, 0).toFixed(0),
-              min_token_d_amount_arg.div(Big(10).pow(a.d_asset.config.extraDecimals)).round(0, 0).toFixed(0)
-            )
-          }) :
-            JSON.stringify({
-              Swap: {
-                pool_ids: NearConfig.marginRouter[routerId].pool_ids,
-                output_token: a.token_d_info.token_id,
-                min_output_amount: min_token_d_amount_arg.div(Big(10).pow(a.d_asset.config.extraDecimals)).round(0, 0).toFixed(0),
-                skip_unwrap_near: true,
-              }
-            })
+          dex_id: NearConfig.refFinanceContractId,
+          swap_action_text: swapMsg,
         }
       }
 
       if (a.is_liquidation) {
-        const is_min_token_d_amount_valid = a.token_c_info.token_id == a.token_d_info.token_id ? min_token_d_amount_arg.add(a.token_c_info.balance).lt(a.token_d_info.balance.add(hp_fee)) : min_token_d_amount_arg.lt(a.token_d_info.balance.add(hp_fee));
-        if (is_min_token_d_amount_valid) {
+        const isTokenDAmountBDInvalid = a.token_c_info.token_id == a.token_d_info.token_id ? tokenDAmountBD.add(a.token_c_info.balance).lt(a.token_d_info.balance.add(hp_fee)) : tokenDAmountBD.lt(a.token_d_info.balance.add(hp_fee));
+        if (isTokenDAmountBDInvalid) {
           a.is_liquidation = false
         } else {
-          a.profit = total_cap.sub(total_debt).mul(Big(margin_config.liq_benefit_liquidator_rate)).div(Big(10000));
-          a.actions = [{ LiquidateMTPosition: args }];
+          if (NearConfig.marginLiquidateDirectMode) {
+            a.profit = total_cap.sub(total_debt);
+            a.actions = [{ 
+              Borrow: {
+                token_id,
+                amount: tokenDAmountBD.add(1000).toFixed(0), // Add small fraction to avoid rounding errors with shares.
+              },
+              LiquidateMTPositionDirect: {
+                pos_owner_id: a.accountId,
+                pos_id: a.position,
+              }
+            }];
+          } else {
+            a.profit = total_cap.sub(total_debt).mul(Big(margin_config.liq_benefit_liquidator_rate)).div(Big(10000));
+            a.actions = [{ LiquidateMTPosition: args }];
+          }
         }
       }
 
@@ -111,14 +112,18 @@ const processAccount = (a, assets, prices, NearConfig, margin_config) => {
         a.actions = [{ ForceCloseMTPosition: args }];
       }
     } else {
-      liquidateLogger.error("Missing " + routerId + " router")
+      liquidateLogger.error("Missing " + a.token_p_id + "&" + a.token_d_info.token_id + " router")
     }
   }
   return a;
 }
 
-const margin_execute_with_price_oracle = async (account, NearConfig, actions) => {
-  const msg = JSON.stringify({
+const margin_execute_with_price_oracle = async (account, NearConfig, actions, isDirectMode=false) => {
+  const msg = isDirectMode ? JSON.stringify({
+    Execute: {
+      actions
+    }
+  }) : JSON.stringify({
     MarginExecute: {
       actions
     }
@@ -135,16 +140,28 @@ const margin_execute_with_price_oracle = async (account, NearConfig, actions) =>
   });
 }
 
-const margin_execute_with_pyth_oracle = async (account, NearConfig, actions) => {
-  return await account.functionCall({
-    "contractId": NearConfig.burrowContractId,
-    "methodName": "margin_execute_with_pyth",
-    "args": {
-      actions
-    },
-    "gas": Big(10).pow(12).mul(300).toFixed(0),
-    "attachedDeposit": "1",
-  });
+const margin_execute_with_pyth_oracle = async (account, NearConfig, actions, isDirectMode=false) => {
+  if (isDirectMode) {
+    return await account.functionCall({
+      "contractId": NearConfig.burrowContractId,
+      "methodName": "execute_with_pyth",
+      "args": {
+        actions
+      },
+      "gas": Big(10).pow(12).mul(300).toFixed(0),
+      "attachedDeposit": "1",
+    });
+  } else {
+    return await account.functionCall({
+      "contractId": NearConfig.burrowContractId,
+      "methodName": "margin_execute_with_pyth",
+      "args": {
+        actions
+      },
+      "gas": Big(10).pow(12).mul(300).toFixed(0),
+      "attachedDeposit": "1",
+    });
+  }
 }
 
 module.exports = {
@@ -155,6 +172,17 @@ module.exports = {
       return;
     }
     const margin_config = await burrowContract.get_margin_config();
+    // const marginBaseTokenLimitPaged = await account.viewFunction({
+    //   "contractId": NearConfig.burrowContractId,
+    //   "methodName": "get_margin_base_token_limit_paged",
+    //   "args": {}
+    // });
+    // const defaultMarginBaseTokenLimit = await account.viewFunction({
+    //   "contractId": NearConfig.burrowContractId,
+    //   "methodName": "get_default_margin_base_token_limit",
+    //   "args": {}
+    // });
+    
     const numAccountsStr = await burrowContract.get_num_margin_accounts();
     const numAccounts = parseInt(numAccountsStr);
     liquidateLogger.debug("Num marginn accounts: ", numAccounts);
@@ -168,14 +196,22 @@ module.exports = {
       );
     }
 
-    const accounts = (await Promise.all(promises))
+    let accounts = (await Promise.all(promises))
       .flat()
       .map((a) => parseAccount(a))
       .flat()
       .filter((a) => !a.is_locking)
-      .map((a) => processAccount(a, assets, prices, NearConfig, margin_config))
-      .filter((a) => (a.is_liquidation && a.actions != null) || (a.is_forceclose && a.actions != null))
+    
+    accounts = (await Promise.all(accounts.map((account) => 
+      processAccount(account, assets, prices, NearConfig, margin_config)
+    )))
+      .filter((a) => (a.is_liquidation && a.actions != null) || (a.is_forceclose && a.actions != null));
 
+    // for (let i = 0; i < accounts.length; ++i) {
+    //   accounts[i] = await processAccount(accounts[i], assets, prices, NearConfig, margin_config);
+    // }
+    // accounts = accounts.filter((a) => (a.is_liquidation && a.actions != null) || (a.is_forceclose && a.actions != null));
+      
     // console.log(JSON.stringify(accounts, undefined, 2));
 
 
@@ -204,8 +240,8 @@ module.exports = {
           liquidateLogger.debug("liquidation action:");
           liquidateLogger.debug(JSON.stringify(liquidationAccounts[0].actions, undefined, 2));
           const outcome = burrow_config.enable_price_oracle ?
-            await margin_execute_with_price_oracle(account, NearConfig, liquidationAccounts[0].actions) :
-            await margin_execute_with_pyth_oracle(account, NearConfig, liquidationAccounts[0].actions);
+            await margin_execute_with_price_oracle(account, NearConfig, liquidationAccounts[0].actions, NearConfig.marginLiquidateDirectMode) :
+            await margin_execute_with_pyth_oracle(account, NearConfig, liquidationAccounts[0].actions, NearConfig.marginLiquidateDirectMode);
           printOutcome("margin liquidation", "./logs/margin_liquidation_success.log", outcome)
         }
       }
