@@ -1,0 +1,247 @@
+const Big = require("big.js");
+const { keysToCamel, bigMin } = require("./utils");
+const { parseAsset } = require("./asset");
+const { getPythPrices, getPriceOralcePrices } = require("./priceData");
+const { parseAccountDetailed, processAccount } = require("./account");
+const { refSell, refBuy } = require("./refExchange");
+
+const log4js = require('log4js');
+const rebalanceLogger = log4js.getLogger();
+
+Big.DP = 27;
+
+async function main(nearObjects) {
+  rebalanceLogger.info('Rebalance Begin');
+  const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, pythOracleContract, NearConfig } =
+    nearObjects;
+
+  const burrowContractAccount = await burrowContract.get_account({
+    account_id: NearConfig.accountId,
+  });
+  if (burrowContractAccount == null) {
+    rebalanceLogger.error(`${NearConfig.accountId} has not registered ${NearConfig.burrowContractId}`);
+    return;
+  }
+
+  const rawAssets = keysToCamel(await burrowContract.get_assets_paged());
+  const assets = rawAssets.reduce((assets, [assetId, asset]) => {
+    assets[assetId] = parseAsset(asset);
+    return assets;
+  }, {});
+
+  const burrow_config = await burrowContract.get_config();
+  const prices = burrow_config.enable_price_oracle ? await getPriceOralcePrices(priceOracleContract, assets) : await getPythPrices(account, burrowContract, pythOracleContract);
+
+  const burrowAccount = processAccount(
+    parseAccountDetailed(
+      keysToCamel(
+        burrowContractAccount
+      )
+    ),
+    assets,
+    prices
+  );
+
+  // console.log(JSON.stringify(burrowAccount, null, 2));
+
+  const repayingActions = [];
+  // Trying to repay first
+  for (let i = 0; i < burrowAccount.borrowed.length; ++i) {
+    const b = burrowAccount.borrowed[i];
+    if (!b.pricedBalance?.gte(NearConfig.minRepayAmount)) {
+      continue;
+    }
+    const s = burrowAccount.supplied.find((s) => s.tokenId === b.tokenId);
+    const token = tokenContract(b.tokenId);
+    const tokenBalance = Big(
+      await token.ft_balance_of({ account_id: NearConfig.accountId })
+    );
+    if (tokenBalance.gt(0)) {
+      const suppliedBalance = s?.balance || Big(0);
+      const mul = Big(10).pow(b.asset.config.extraDecimals);
+      const balance = tokenBalance.mul(mul);
+      const depositAmount = bigMin(b.balance.sub(suppliedBalance), balance);
+
+      const amount = depositAmount.div(mul).round(0, 0);
+      if (amount.gt(0)) {
+        // Depositing then maybe repaying
+        rebalanceLogger.debug(
+          `Depositing ${b.tokenId} amount ${amount.toFixed(0)} and repaying`
+        );
+        await token.ft_transfer_call(
+          {
+            signerAccount: account,
+            args: {
+              receiver_id: NearConfig.burrowContractId,
+              amount: amount.toFixed(0),
+              msg: JSON.stringify({
+                Execute: {
+                  actions: [
+                    {
+                      Repay: {
+                        token_id: b.tokenId,
+                      },
+                    },
+                  ],
+                },
+              }),
+            },
+            gas: Big(10).pow(12).mul(300).toFixed(0),
+            amount: "1"
+          }
+        );
+        return main(nearObjects);
+      }
+    }
+
+    if (s && s.pricedBalance.gt(NearConfig.minRepayAmount)) {
+      const amount = bigMin(b.balance, s.balance);
+      rebalanceLogger.debug(`Repaying ${b.tokenId} amount ${amount.toFixed(0)}`);
+      repayingActions.push({
+        Repay: {
+          token_id: b.tokenId,
+        },
+      });
+    }
+  }
+
+  if (repayingActions.length > 0) {
+    await burrowContract.execute(
+      {
+        signerAccount: account,
+        args: {
+          actions: repayingActions,
+        },
+        gas: Big(10).pow(12).mul(300).toFixed(0),
+        amount: "1"
+      }
+    );
+    return main(nearObjects);
+  }
+
+  const withdrawActions = [];
+  // Withdrawing supplied tokens
+  for (let i = 0; i < burrowAccount.supplied.length; ++i) {
+    const s = burrowAccount.supplied[i];
+    if (s.pricedBalance?.gt(NearConfig.minSwapAmount)) {
+      rebalanceLogger.debug(`Withdrawing ${s.tokenId} amount ${s.balance.toFixed(0)}`);
+      withdrawActions.push({
+        Withdraw: {
+          token_id: s.tokenId,
+          max_amount: s.balance.toFixed(0),
+        },
+      });
+    }
+  }
+
+  if (withdrawActions.length > 0) {
+    await burrowContract.execute(
+      {
+        signerAccount: account,
+        args: {
+          actions: withdrawActions,
+        },
+        gas: Big(10).pow(12).mul(300).toFixed(0),
+        amount: "1"
+      }
+    );
+    return main(nearObjects);
+  }
+
+  let deposits = await refFinanceContract.get_deposits({ account_id: NearConfig.accountId })
+  let withdrawDepositPromises = []
+  Object.entries(deposits).forEach(([token_id, amount]) => {
+    if (amount > 0) {
+      withdrawDepositPromises.push(
+        refFinanceContract.withdraw(
+          {
+            signerAccount: account,
+            args: { token_id, amount },
+            gas: Big(10).pow(12).mul(300).toFixed(0),
+            amount: "1"
+          }
+        ),
+      );
+    }
+  })
+  if (withdrawDepositPromises.length > 0) {
+    await Promise.all(withdrawDepositPromises);
+  }
+
+  // Attempting to sell non-sold tokens
+  let tokenIds = Object.keys(assets);
+  for (let i = 0; i < tokenIds.length; ++i) {
+    const tokenId = tokenIds[i];
+    if (tokenId === NearConfig.wrapNearAccountId || tokenId.substring(0, 14) == "shadow_ref_v1-") {
+      // Don't attempt sell wNEAR
+      continue;
+    }
+    const token = tokenContract(tokenId);
+    const balance = Big(
+      await token.ft_balance_of({ account_id: NearConfig.accountId })
+    );
+    const price = prices?.prices[tokenId];
+    const pricedBalance = price
+      ? balance.mul(price.multiplier).div(Big(10).pow(price.decimals))
+      : null;
+    if (pricedBalance?.gt(NearConfig.minSwapAmount)) {
+      rebalanceLogger.debug(`Selling ${tokenId} amount ${balance.toFixed(0)}`);
+      // Swapping this asset for wNEAR
+      await refSell(nearObjects, tokenId, balance);
+      return main(nearObjects);
+    }
+  }
+
+  // Buying borrowed assets to repay
+  for (let i = 0; i < burrowAccount.borrowed.length; ++i) {
+    const b = burrowAccount.borrowed[i];
+    if (b.pricedBalance?.gt(NearConfig.minSwapAmount)) {
+      rebalanceLogger.debug(`Buying ${b.tokenId} amount ${b.balance.toFixed(0)}`);
+      // Buying this asset for wNEAR
+      const token = tokenContract(b.tokenId);
+      const storageBalance = await token.storage_balance_of({
+        account_id: NearConfig.accountId,
+      });
+      if (Big(storageBalance?.total || 0).eq(0)) {
+        rebalanceLogger.debug(`Paying storage for ${b.tokenId}`);
+        await token.storage_deposit(
+          {
+            signerAccount: account,
+            args: { registration_only: true },
+            gas: Big(10).pow(12).mul(300).toFixed(0),
+            amount: Big(10).pow(23).toFixed(0)
+          }
+        );
+      }
+      // Don't attempt buy wNEAR
+      if (!(b.tokenId === NearConfig.wrapNearAccountId)) {
+        await refBuy(nearObjects, b.tokenId, b.tokenBalance);
+      }
+
+      const balance = bigMin(
+        Big(await token.ft_balance_of({ account_id: NearConfig.accountId })),
+        b.tokenBalance
+      );
+      if (balance.gt(0)) {
+        rebalanceLogger.debug(`Depositing ${b.tokenId} amount ${balance.toFixed(0)}`);
+        await token.ft_transfer_call(
+          {
+            signerAccount: account,
+            args: {
+              receiver_id: NearConfig.burrowContractId,
+              amount: balance.toFixed(0),
+              msg: "",
+            },
+            gas: Big(10).pow(12).mul(300).toFixed(0),
+            amount: "1"
+          }
+        );
+      }
+      return main(nearObjects);
+    }
+  }
+}
+
+module.exports = {
+    main
+}
