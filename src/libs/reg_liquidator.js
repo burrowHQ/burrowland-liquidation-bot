@@ -4,7 +4,7 @@ const registerLogger = log4js.getLogger();
 
 Big.DP = 27;
 
-async function main(nearObjects) {
+async function main(nearObjects, tokenRegisterAlreadyCheckList=[]) {
     registerLogger.info('Register Begin');
     const { account, tokenContract, burrowContract, NearConfig } = nearObjects;
 
@@ -57,7 +57,7 @@ async function main(nearObjects) {
     const rawAssets = await burrowContract.get_assets_paged();
     for (let i = 0; i < rawAssets.length; ++i) {
         const tokenId = rawAssets[i][0]
-        if (tokenId.substring(0, 14) != "shadow_ref_v1-" && (rawAssets[i][1]['config']['can_use_as_collateral'] == true || rawAssets[i][1]['config']['can_borrow'] == true)) {
+        if (tokenId.substring(0, 14) != "shadow_ref_v1-" && (rawAssets[i][1]['config']['can_use_as_collateral'] == true || rawAssets[i][1]['config']['can_borrow'] == true) && !tokenRegisterAlreadyCheckList.includes(tokenId)) {
             registerLogger.debug('check', tokenId)
             const token = tokenContract(tokenId);
             const storageBalance = await token.storage_balance_of({
@@ -76,6 +76,7 @@ async function main(nearObjects) {
                     "attachedDeposit": Big(10).pow(23).toFixed(0),
                 });
             }
+            tokenRegisterAlreadyCheckList.push(tokenId);
         } else {
             registerLogger.debug('skip', tokenId)
         }

@@ -26,8 +26,9 @@ initNear(true).then((nearObject) => {
         }
     });
     const logger = log4js.getLogger();
+    const tokenRegisterAlreadyCheckList = [];
     const executeTokenRegisterAsyncOperation = () => {
-        tokenRegister(nearObject).then(() => {
+        tokenRegister(nearObject, tokenRegisterAlreadyCheckList).then(() => {
             logger.info('Register End');
             setTimeout(executeTokenRegisterAsyncOperation, nearObject.NearConfig.loopInterval);
         }).catch(error => {
