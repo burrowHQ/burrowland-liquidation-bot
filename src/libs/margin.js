@@ -38,8 +38,9 @@ const updateActions = (actions, amount_in, min_amount_out) => {
   return newActions
 }
 
-const processAccount = async (a, assets, prices, NearConfig, margin_config) => {
-  // const baseTokenId = a.token_c_info.token_id == a.token_d_info.token_id ? a.token_p_id : a.token_d_info.token_id;
+const processAccount = async (a, assets, prices, NearConfig, marginBaseTokenLimitPaged, defaultMarginBaseTokenLimit) => {
+  const baseTokenId = a.token_c_info.token_id == a.token_d_info.token_id ? a.token_p_id : a.token_d_info.token_id;
+  const baseTokenMarginConfig = marginBaseTokenLimitPaged[baseTokenId] == undefined ? defaultMarginBaseTokenLimit : marginBaseTokenLimitPaged[baseTokenId];
   a.c_asset = assets[a.token_c_info.token_id];
   a.d_asset = assets[a.token_d_info.token_id];
   a.p_asset = assets[a.token_p_id];
@@ -61,7 +62,7 @@ const processAccount = async (a, assets, prices, NearConfig, margin_config) => {
   const total_cap = a.token_c_price_balance.add(a.token_p_price_balance);
   const total_debt = a.token_d_price_balance.add(a.hp_fee_price_balance);
   a.is_liquidation = total_cap.gte(total_debt) &&
-    total_cap.sub(total_cap.mul(parseRatio(margin_config.min_safety_buffer))).lt(total_debt)
+    total_cap.sub(total_cap.mul(parseRatio(baseTokenMarginConfig.min_safety_buffer))).lt(total_debt)
   a.is_forceclose = total_cap.lt(total_debt)
   a.actions = null;
 
@@ -90,18 +91,22 @@ const processAccount = async (a, assets, prices, NearConfig, margin_config) => {
         } else {
           if (NearConfig.marginLiquidateDirectMode) {
             a.profit = total_cap.sub(total_debt);
-            a.actions = [{ 
-              Borrow: {
-                token_id,
-                amount: tokenDAmountBD.add(1000).toFixed(0), // Add small fraction to avoid rounding errors with shares.
+            a.actions = [
+              { 
+                Borrow: {
+                  token_id: a.token_d_info.token_id,
+                  amount: a.token_d_info.balance.mul(Big("1.0000001")).toFixed(0), // Add small fraction to avoid rounding errors with shares.
+                }
               },
-              LiquidateMTPositionDirect: {
-                pos_owner_id: a.accountId,
-                pos_id: a.position,
+              {
+                LiquidateMTPositionDirect: {
+                  pos_owner_id: a.accountId,
+                  pos_id: a.position,
+                }
               }
-            }];
+            ];
           } else {
-            a.profit = total_cap.sub(total_debt).mul(Big(margin_config.liq_benefit_liquidator_rate)).div(Big(10000));
+            a.profit = total_cap.sub(total_debt).mul(Big(baseTokenMarginConfig.liq_benefit_liquidator_rate)).div(Big(10000));
             a.actions = [{ LiquidateMTPosition: args }];
           }
         }
@@ -171,17 +176,17 @@ module.exports = {
       liquidateLogger.error(`${NearConfig.accountId} has not registered ${NearConfig.burrowContractId}`);
       return;
     }
-    const margin_config = await burrowContract.get_margin_config();
-    // const marginBaseTokenLimitPaged = await account.viewFunction({
-    //   "contractId": NearConfig.burrowContractId,
-    //   "methodName": "get_margin_base_token_limit_paged",
-    //   "args": {}
-    // });
-    // const defaultMarginBaseTokenLimit = await account.viewFunction({
-    //   "contractId": NearConfig.burrowContractId,
-    //   "methodName": "get_default_margin_base_token_limit",
-    //   "args": {}
-    // });
+    // const margin_config = await burrowContract.get_margin_config();
+    const marginBaseTokenLimitPaged = await account.viewFunction({
+      "contractId": NearConfig.burrowContractId,
+      "methodName": "get_margin_base_token_limit_paged",
+      "args": {}
+    });
+    const defaultMarginBaseTokenLimit = await account.viewFunction({
+      "contractId": NearConfig.burrowContractId,
+      "methodName": "get_default_margin_base_token_limit",
+      "args": {}
+    });
     
     const numAccountsStr = await burrowContract.get_num_margin_accounts();
     const numAccounts = parseInt(numAccountsStr);
@@ -203,7 +208,7 @@ module.exports = {
       .filter((a) => !a.is_locking)
     
     accounts = (await Promise.all(accounts.map((account) => 
-      processAccount(account, assets, prices, NearConfig, margin_config)
+      processAccount(account, assets, prices, NearConfig, marginBaseTokenLimitPaged, defaultMarginBaseTokenLimit)
     )))
       .filter((a) => (a.is_liquidation && a.actions != null) || (a.is_forceclose && a.actions != null));
 
