@@ -119,6 +119,7 @@ module.exports = {
 
     // margin
     config.marginLiquidate = process.env.MARGIN_LIQUIDATE == 'true' || false;
+    config.marginLiquidateDirectMode = process.env.MARGIN_LIQUIDATE_DIRECT_MODE == 'true' || false;
     config.marginForceClose = process.env.MARGIN_FORCE_CLOSE == 'true' || false;
     config.marginForceCloseMinLoss = Big(process.env.MARGIN_FORCE_CLOSE_MIN_LOSS || "1");
     config.marginDataServiceUrl = process.env.MARGIN_DATA_SERVICE_URL;

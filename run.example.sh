@@ -72,6 +72,8 @@ export REGULAR_PAGED_LIMIT=150
 ######## MARGIN POSITIONS SECTION ########
 # default to false, switch of liquidation for margin positions
 export MARGIN_LIQUIDATE=false
+# default to false, switch of direct liquidation for margin positions
+# export MARGIN_LIQUIDATE_DIRECT_MODE=true
 # default to false, switch of forcing close for margin positions
 export MARGIN_FORCE_CLOSE=false
 
