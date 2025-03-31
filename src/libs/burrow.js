@@ -237,11 +237,11 @@ module.exports = {
           assets,
           prices
         );
-        const maxLiquidationAmount = signerAccount.adjustedCollateralSum.sub(signerAccount.adjustedBorrowedSum);
-        if (maxLiquidationAmount.lte(Big(0))) {
-          liquidateLogger.error("signer account maxLiquidationAmount <= 0");
-          return;
-        }
+        // const maxLiquidationAmount = signerAccount.adjustedCollateralSum.sub(signerAccount.adjustedBorrowedSum);
+        // if (maxLiquidationAmount.lte(Big(0))) {
+        //   liquidateLogger.error("signer account maxLiquidationAmount <= 0");
+        //   return;
+        // }
         if (signerAccount.healthFactor != undefined && signerAccount.healthFactor.lt(NearConfig.stopLiquidationHealthFactor)) {
           liquidateLogger.error("signer account healthFactor is", signerAccount.healthFactor.toFixed(0), ", wait rebalance");
           return;
@@ -261,7 +261,7 @@ module.exports = {
           );
           const liquidation = computeLiquidation(
             accountsWithDebt[i],
-            maxLiquidationAmount,
+            NearConfig.maxLiquidationAmount,
             NearConfig.maxWithdrawCount,
             burrowAccount
           );
