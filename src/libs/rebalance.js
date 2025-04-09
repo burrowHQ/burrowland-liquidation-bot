@@ -177,9 +177,15 @@ async function main(nearObjects) {
       continue;
     }
     const token = tokenContract(tokenId);
-    const balance = Big(
-      await token.ft_balance_of({ account_id: NearConfig.accountId })
-    );
+    let balance = 0
+    try {
+      balance = Big(
+        await token.ft_balance_of({ account_id: NearConfig.accountId })
+      );
+    } catch (error) {
+      rebalanceLogger.warn(tokenId, 'ft_balance_of failed:', error);
+      continue
+    }
     const price = prices?.prices[tokenId];
     const pricedBalance = price
       ? balance.mul(price.multiplier).div(Big(10).pow(price.decimals))
