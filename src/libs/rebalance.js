@@ -172,8 +172,9 @@ async function main(nearObjects) {
   let tokenIds = Object.keys(assets);
   for (let i = 0; i < tokenIds.length; ++i) {
     const tokenId = tokenIds[i];
-    if (tokenId === NearConfig.wrapNearAccountId || tokenId.substring(0, 14) == "shadow_ref_v1-") {
+    if (tokenId === NearConfig.wrapNearAccountId || tokenId.substring(0, 14) == "shadow_ref_v1-" || tokenId === 'aurora') {
       // Don't attempt sell wNEAR
+      // Aurora has been migrated to eth.bridge.near 
       continue;
     }
     const token = tokenContract(tokenId);
