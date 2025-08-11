@@ -383,7 +383,7 @@ const computeLiquidation = (
 
   // Adjusting collateralAssets amounts.
   collateralAssets.forEach((a) => {
-    a.amount = a.amount.mul(99895).div(100000).round(0, 0);
+    a.amount = a.amount.mul(99888).div(100000).round(0, 0);
   });
   borrowedAssets.forEach((a) => {
     a.amount = a.amount.mul(9990).div(10000).round(0, 0);
