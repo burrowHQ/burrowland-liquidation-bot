@@ -145,6 +145,14 @@ module.exports = {
       }
     );
 
+    const dclContract = new nearAPI.Contract(
+      connection,
+      NearConfig.dclContractId,
+      {
+        viewMethods: ["quote", "quote_by_output"],
+      }
+    );
+
     return {
       near,
       account,
@@ -153,6 +161,7 @@ module.exports = {
       burrowContract,
       priceOracleContract,
       pythOracleContract,
+      dclContract,
       NearConfig,
     };
   },

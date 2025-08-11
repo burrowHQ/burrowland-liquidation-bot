@@ -26,6 +26,8 @@ const tokenDecimals = {
   "wrap.near": 24,
 };
 
+const feeTier = ['100', '400', '2000', '10000'];
+
 let tokenCache = null;
 let swapFailedConter = 0;
 
@@ -348,6 +350,47 @@ async function prepareRef(nearObjects) {
   };
 }
 
+const findDclBestReturn = async (
+  dclContract,
+  inTokenAccountId,
+  outTokenAccountId,
+  amountIn
+) => {
+  let swapInfo = {
+    amountOut: Big(0),
+  };
+  let poolIdHead = '';
+  if (inTokenAccountId < outTokenAccountId) {
+    poolIdHead = inTokenAccountId + '|' + outTokenAccountId + '|';
+  } else {
+    poolIdHead = outTokenAccountId + '|' + inTokenAccountId + '|';
+  }
+
+  for (const tier of feeTier) {
+    let poolId = poolIdHead + tier;
+    try {
+      const result = await dclContract.quote({
+        'pool_ids': [poolId],
+        'input_token': inTokenAccountId,
+        'output_token': outTokenAccountId,
+        'input_amount': amountIn,
+      });
+      const amountOut = Big(result.amount);
+      if (amountOut.gt(swapInfo.amountIn)) {
+        swapInfo = {
+          poolId,
+          amountOut,
+        };
+      }
+    } catch { }
+  }
+  return Object.assign(swapInfo, {
+    inTokenAccountId,
+    outTokenAccountId,
+    amountIn,
+  });
+}
+
 const findBestReturn = (
   refFinance,
   inTokenAccountId,
@@ -384,11 +427,11 @@ const findBestReturn = (
             poolReturn =
               poolReturn === false
                 ? getRefReturn(
-                    pool,
-                    inTokenAccountId,
-                    amountIn,
-                    middleTokenAccountId
-                  )
+                  pool,
+                  inTokenAccountId,
+                  amountIn,
+                  middleTokenAccountId
+                )
                 : poolReturn;
             if (!poolReturn) {
               return;
@@ -423,6 +466,48 @@ const findBestReturn = (
     expectedAmountOut: Big(0),
   });
 };
+
+const dclFindBestInverseReturn = async (
+  dclContract,
+  inTokenAccountId,
+  outTokenAccountId,
+  availableInToken,
+  outAmount
+) => {
+  let swapInfo = {
+    amountIn: availableInToken,
+  };
+  let poolIdHead = '';
+  if (inTokenAccountId < outTokenAccountId) {
+    poolIdHead = inTokenAccountId + '|' + outTokenAccountId + '|';
+  } else {
+    poolIdHead = outTokenAccountId + '|' + inTokenAccountId + '|';
+  }
+
+  for (const tier of feeTier) {
+    let poolId = poolIdHead + tier;
+    try {
+      const result = await dclContract.quote_by_output({
+        'pool_ids': [poolId],
+        'input_token': inTokenAccountId,
+        'output_token': outTokenAccountId,
+        'output_amount': outAmount,
+      });
+      const amountIn = Big(result.amount);
+      if (amountIn.gt(Big(0)) && amountIn.lt(swapInfo.amountIn)) {
+        swapInfo = {
+          poolId,
+          amountIn,
+        };
+      }
+    } catch { }
+  }
+  return Object.assign(swapInfo, {
+    inTokenAccountId,
+    outTokenAccountId,
+    amountOut: outAmount,
+  });
+}
 
 const findBestInverseReturn = (
   refFinance,
@@ -467,11 +552,11 @@ const findBestInverseReturn = (
             middleAmountIn =
               middleAmountIn === false
                 ? getRefInverseReturn(
-                    pool,
-                    outTokenAccountId,
-                    outAmount,
-                    middleTokenAccountId
-                  )
+                  pool,
+                  outTokenAccountId,
+                  outAmount,
+                  middleTokenAccountId
+                )
                 : middleAmountIn;
             if (!middleAmountIn) {
               return;
@@ -532,12 +617,41 @@ async function executeSwap(nearObjects, swapInfo) {
                 min_amount_out:
                   tokenId === swapInfo.outTokenAccountId
                     ? swapInfo.amountOut
-                        .mul(Big(100).sub(NearConfig.maxSlippage).div(100))
-                        .round(0, 0)
-                        .toFixed(0)
+                      .mul(Big(100).sub(NearConfig.maxSlippage).div(100))
+                      .round(0, 0)
+                      .toFixed(0)
                     : "0",
               };
             }),
+          }),
+        },
+        gas: Big(10).pow(12).mul(300).toFixed(0),
+        amount: "1"
+      }
+    )
+  );
+}
+
+async function executeDclSwap(nearObjects, swapInfo) {
+  const { account, tokenContract, NearConfig } = nearObjects;
+  let tokenId = swapInfo.inTokenAccountId;
+  let token = tokenContract(tokenId);
+  return Big(
+    await token.ft_transfer_call(
+      {
+        signerAccount: account,
+        args: {
+          receiver_id: NearConfig.dclContractId,
+          amount: swapInfo.amountIn.toFixed(0),
+          msg: JSON.stringify({
+            'Swap': {
+              'pool_ids': [swapInfo.poolId],
+              'output_token': swapInfo.outTokenAccountId,
+              'min_output_amount': swapInfo.amountOut.mul(Big(100).sub(NearConfig.maxSlippage).div(100))
+                .round(0, 0)
+                .toFixed(0),
+              'skip_unwrap_near': true,
+            },
           }),
         },
         gas: Big(10).pow(12).mul(300).toFixed(0),
@@ -562,29 +676,67 @@ async function refSell(nearObjects, tokenId, amountIn) {
     amountIn
   );
 
-  if (swapInfo.pools) {
-    return executeSwap(nearObjects, swapInfo)
-      .then(() => {
-        swapFailedConter = 0;
-        rebalanceLogger.debug('refSell executeSwap succeeded');
-      })
-      .catch(error => {
-        if (swapFailedConter < NearConfig.swapFailedLimit) {
-          swapFailedConter += 1;
-          rebalanceLogger.error(`refSell executeSwap failed(${swapFailedConter} times):`, error)
-        } else {
-          rebalanceLogger.error(`refSell executeSwap failed(${swapFailedConter} times):`, error)
-          process.exit(1)
-        }
-      });
-  } else {
-    rebalanceLogger.warn("refSell ", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
-    await sleep(10000);
+  const dclSwapInfo = await findDclBestReturn(
+    dclContract,
+    tokenId,
+    NearConfig.wrapNearAccountId,
+    amountIn
+  );
+
+  let swapExchange = undefined;
+  if (swapInfo.pools && dclSwapInfo.poolId) {
+    if (swapInfo.amountOut.gt(dclSwapInfo.amountOut)) {
+      swapExchange = 'exchange'
+    } else {
+      swapExchange = 'dcl'
+    }
+  } else if (!swapInfo.pools && dclSwapInfo.poolId) {
+    swapExchange = 'dcl'
+  } else if (swapInfo.pools && !dclSwapInfo.poolId) {
+    swapExchange = 'exchange'
+  }
+
+  switch (swapExchange) {
+    case "exchange":
+      await executeSwap(nearObjects, swapInfo)
+        .then(() => {
+          swapFailedConter = 0;
+          rebalanceLogger.debug('refSell executeSwap succeeded');
+        })
+        .catch(error => {
+          if (swapFailedConter < NearConfig.swapFailedLimit) {
+            swapFailedConter += 1;
+            rebalanceLogger.error(`refSell executeSwap failed(${swapFailedConter} times):`, error)
+          } else {
+            rebalanceLogger.error(`refSell executeSwap failed(${swapFailedConter} times):`, error)
+            process.exit(1)
+          }
+        });
+      break;
+    case "dcl":
+      await executeDclSwap(nearObjects, swapInfo)
+        .then(() => {
+          swapFailedConter = 0;
+          rebalanceLogger.debug('refSell executeDclSwap succeeded');
+        })
+        .catch(error => {
+          if (swapFailedConter < NearConfig.swapFailedLimit) {
+            swapFailedConter += 1;
+            rebalanceLogger.error(`refSell executeDclSwap failed(${swapFailedConter} times):`, error)
+          } else {
+            rebalanceLogger.error(`refSell executeDclSwap failed(${swapFailedConter} times):`, error)
+            process.exit(1)
+          }
+        });
+      break;
+    default:
+      rebalanceLogger.warn("refSell", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
+      await sleep(5000);
   }
 }
 
 async function refBuy(nearObjects, tokenId, amountOut) {
-  const { NearConfig, tokenContract } = nearObjects;
+  const { NearConfig, tokenContract, dclContract } = nearObjects;
 
   if (tokenId === NearConfig.wrapNearAccountId) {
     return amountOut;
@@ -602,29 +754,73 @@ async function refBuy(nearObjects, tokenId, amountOut) {
     amountOut
   );
 
-  if (swapInfo.pools && wrapNearBalance.lt(swapInfo.amountIn)) {
-    rebalanceLogger.warn("Needs", swapInfo.amountIn.toFixed(0), "wrap to Buying, but the account balance is only", wrapNearBalance.toFixed(0))
+  const dclSwapInfo = await dclFindBestInverseReturn(
+    dclContract,
+    NearConfig.wrapNearAccountId,
+    tokenId,
+    Big(10).pow(32),
+    amountOut
+  );
+
+  let swapExchange = undefined;
+  let needAmount = undefined;
+  if (swapInfo.pools && dclSwapInfo.poolId) {
+    if (swapInfo.amountIn.lt(dclSwapInfo.amountIn)) {
+      swapExchange = 'exchange'
+      needAmount = swapInfo.amountIn
+    } else {
+      swapExchange = 'dcl'
+      needAmount = dclSwapInfo.amountIn
+    }
+  } else if (!swapInfo.pools && dclSwapInfo.poolId) {
+    swapExchange = 'dcl'
+    needAmount = dclSwapInfo.amountIn
+  } else if (swapInfo.pools && !dclSwapInfo.poolId) {
+    swapExchange = 'exchange'
+    needAmount = swapInfo.amountIn
+  }
+
+  if (needAmount && wrapNearBalance.lt(needAmount)) {
+    rebalanceLogger.warn("Needs", needAmount.toFixed(0), "wrap to Buying, but the account balance is only", wrapNearBalance.toFixed(0))
     return;
   }
 
-  if (swapInfo.pools) {
-    return executeSwap(nearObjects, swapInfo)
-      .then(() => {
-        swapFailedConter = 0;
-        rebalanceLogger.debug('refBuy executeSwap succeeded');
-      })
-      .catch(error => {
-        if (swapFailedConter < NearConfig.swapFailedLimit) {
-          swapFailedConter += 1;
-          rebalanceLogger.error(`refBuy executeSwap failed(${swapFailedConter} times):`, error)
-        } else {
-          rebalanceLogger.error(`refBuy executeSwap failed(${swapFailedConter} times):`, error)
-          process.exit(1)
-        }
-      });
-  } else {
-    rebalanceLogger.warn("refBuy", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
-    await sleep(5000);
+  switch (swapExchange) {
+    case "exchange":
+      await executeSwap(nearObjects, swapInfo)
+        .then(() => {
+          swapFailedConter = 0;
+          rebalanceLogger.debug('refBuy executeSwap succeeded');
+        })
+        .catch(error => {
+          if (swapFailedConter < NearConfig.swapFailedLimit) {
+            swapFailedConter += 1;
+            rebalanceLogger.error(`refBuy executeSwap failed(${swapFailedConter} times):`, error)
+          } else {
+            rebalanceLogger.error(`refBuy executeSwap failed(${swapFailedConter} times):`, error)
+            process.exit(1)
+          }
+        });
+      break;
+    case "dcl":
+      await executeDclSwap(nearObjects, swapInfo)
+        .then(() => {
+          swapFailedConter = 0;
+          rebalanceLogger.debug('refBuy executeDclSwap succeeded');
+        })
+        .catch(error => {
+          if (swapFailedConter < NearConfig.swapFailedLimit) {
+            swapFailedConter += 1;
+            rebalanceLogger.error(`refBuy executeDclSwap failed(${swapFailedConter} times):`, error)
+          } else {
+            rebalanceLogger.error(`refBuy executeDclSwap failed(${swapFailedConter} times):`, error)
+            process.exit(1)
+          }
+        });
+      break;
+    default:
+      rebalanceLogger.warn("refBuy", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
+      await sleep(5000);
   }
 }
 
