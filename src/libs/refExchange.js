@@ -714,7 +714,7 @@ async function refSell(nearObjects, tokenId, amountIn) {
         });
       break;
     case "dcl":
-      await executeDclSwap(nearObjects, swapInfo)
+      await executeDclSwap(nearObjects, dclSwapInfo)
         .then(() => {
           swapFailedConter = 0;
           rebalanceLogger.debug('refSell executeDclSwap succeeded');
@@ -803,7 +803,7 @@ async function refBuy(nearObjects, tokenId, amountOut) {
         });
       break;
     case "dcl":
-      await executeDclSwap(nearObjects, swapInfo)
+      await executeDclSwap(nearObjects, dclSwapInfo)
         .then(() => {
           swapFailedConter = 0;
           rebalanceLogger.debug('refBuy executeDclSwap succeeded');
