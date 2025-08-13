@@ -662,7 +662,7 @@ async function executeDclSwap(nearObjects, swapInfo) {
 }
 
 async function refSell(nearObjects, tokenId, amountIn) {
-  const { NearConfig } = nearObjects;
+  const { NearConfig, dclContract } = nearObjects;
 
   if (tokenId === NearConfig.wrapNearAccountId) {
     return amountIn;
