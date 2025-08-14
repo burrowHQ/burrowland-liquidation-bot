@@ -12,7 +12,7 @@ Big.DP = 27;
 
 async function main(nearObjects) {
   rebalanceLogger.info('Rebalance Begin');
-  const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, pythOracleContract, NearConfig } =
+  const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, pythOracleContract, rheaContract, xrheaContract, NearConfig } =
     nearObjects;
 
   const burrowContractAccount = await burrowContract.get_account({
@@ -168,8 +168,22 @@ async function main(nearObjects) {
     await Promise.all(withdrawDepositPromises);
   }
 
+  const xrheaBalanceStr = await xrheaContract.ft_balance_of({ account_id: NearConfig.accountId });
+  if (xrheaBalanceStr != '0') {
+    await account.functionCall({
+      "contractId": NearConfig.xrheaContractId,
+      "methodName": "unstake",
+      "args": {
+        amount: xrheaBalanceStr
+      },
+      "gas": Big(10).pow(12).mul(300).toFixed(0),
+      "attachedDeposit": "1",
+    });
+  }
+
   // Attempting to sell non-sold tokens
   let tokenIds = Object.keys(assets);
+  tokenIds.push(NearConfig.rheaContractId);
   for (let i = 0; i < tokenIds.length; ++i) {
     const tokenId = tokenIds[i];
     if (tokenId === NearConfig.wrapNearAccountId || tokenId.substring(0, 14) == "shadow_ref_v1-" || tokenId === 'aurora') {
@@ -222,7 +236,26 @@ async function main(nearObjects) {
       }
       // Don't attempt buy wNEAR
       if (!(b.tokenId === NearConfig.wrapNearAccountId)) {
-        await refBuy(nearObjects, b.tokenId, b.tokenBalance);
+        if (b.tokenId != NearConfig.xrheaContractId) {
+          await refBuy(nearObjects, b.tokenId, b.tokenBalance);
+        } else {
+          const xrheaPrice = Big(await token.get_virtual_price());
+          const xrheaPriceDecimals = Big(100000000);
+          const expectedRheaAmount = b.tokenBalance.mul(xrheaPrice).div(xrheaPriceDecimals).round(0, 3);
+          await refBuy(nearObjects, NearConfig.rheaContractId, expectedRheaAmount);
+          const rheaBalanceStr = await rheaContract.ft_balance_of({ account_id: NearConfig.accountId });
+          await account.functionCall({
+            "contractId": NearConfig.rheaContractId,
+            "methodName": "ft_transfer_call",
+            "args": {
+              receiver_id: NearConfig.xrheaContractId,
+              amount: rheaBalanceStr,
+              msg: "{\"Stake\":{}}",
+            },
+            "gas": Big(10).pow(12).mul(300).toFixed(0),
+            "attachedDeposit": "1",
+          });
+        }
       }
 
       const balance = bigMin(
@@ -250,5 +283,5 @@ async function main(nearObjects) {
 }
 
 module.exports = {
-    main
+  main
 }

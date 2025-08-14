@@ -153,6 +153,24 @@ module.exports = {
       }
     );
 
+    const rheaContract = new nearAPI.Contract(
+      connection,
+      NearConfig.rheaContractId,
+      {
+        changeMethods: ["ft_transfer_call"],
+        viewMethods: ["ft_balance_of"],
+      }
+    );
+
+    const xrheaContract = new nearAPI.Contract(
+      connection,
+      NearConfig.xrheaContractId,
+      {
+        changeMethods: ["unstake"],
+        viewMethods: ["get_virtual_price", "ft_balance_of"],
+      }
+    );
+
     return {
       near,
       account,
@@ -162,6 +180,8 @@ module.exports = {
       priceOracleContract,
       pythOracleContract,
       dclContract,
+      rheaContract,
+      xrheaContract,
       NearConfig,
     };
   },
