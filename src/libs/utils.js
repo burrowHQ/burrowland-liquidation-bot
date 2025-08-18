@@ -112,7 +112,7 @@ const getRefExchangeSwapMsg = async (smartrouterUrl, amountIn, tokenIn, tokenOut
   const url = `${smartrouterUrl}/swapPath?amountIn=${amountIn}&tokenIn=${tokenIn}&tokenOut=${tokenOut}&pathDeep=${pathDeep}&slippage=${slippage}&routerCount=${routerCount}`;
   const response = await fetch(url);
   const responseJson = await response.json();
-  if (responseJson.result_data.args.amount == amountIn) {
+  if (responseJson.result_data && responseJson.result_data.args.amount == amountIn) {
     return responseJson.result_data.args.msg
   } else {
     return ""
