@@ -205,7 +205,7 @@ async function main(nearObjects) {
     const pricedBalance = price
       ? balance.mul(price.multiplier).div(Big(10).pow(price.decimals))
       : null;
-    if (pricedBalance?.gt(NearConfig.minSwapAmount)) {
+    if (tokenId == NearConfig.rheaContractId || pricedBalance?.gt(NearConfig.minSwapAmount)) {
       rebalanceLogger.debug(`Selling ${tokenId} amount ${balance.toFixed(0)}`);
       // Swapping this asset for wNEAR
       await refSell(nearObjects, tokenId, balance);
