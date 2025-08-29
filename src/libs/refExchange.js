@@ -391,6 +391,27 @@ const findDclBestReturn = async (
   });
 }
 
+const findBestReturnBySmartRouter = async (
+  smartrouterUrl,
+  inTokenAccountId,
+  outTokenAccountId,
+  amountIn,
+  slippage = 0.005, pathDeep = 3, routerCount = 2
+) => {
+  const url = `${smartrouterUrl}/swapPath?amountIn=${amountIn.toFixed(0)}&tokenIn=${inTokenAccountId}&tokenOut=${outTokenAccountId}&pathDeep=${pathDeep}&slippage=${slippage}&routerCount=${routerCount}`;
+  const response = await fetch(url);
+  const responseJson = await response.json();
+  if (responseJson.result_data && responseJson.result_data.args.amount == amountIn.toFixed(0)) {
+    return {
+      amountIn,
+      amountOut: Big(responseJson.result_data.amountOut),
+      msg: responseJson.result_data.args.msg
+    }
+  } else {
+    return undefined
+  }
+}
+
 const findBestReturn = (
   refFinance,
   inTokenAccountId,
@@ -595,6 +616,26 @@ const findBestInverseReturn = (
   });
 };
 
+async function executeSmartRouterSwap(nearObjects, swapInfo) {
+  const { account, tokenContract, NearConfig } = nearObjects;
+  let tokenId = swapInfo.inTokenAccountId;
+  let token = tokenContract(tokenId);
+  return Big(
+    await token.ft_transfer_call(
+      {
+        signerAccount: account,
+        args: {
+          receiver_id: NearConfig.refFinanceContractId,
+          amount: swapInfo.amountIn.toFixed(0),
+          msg: swapInfo.msg,
+        },
+        gas: Big(10).pow(12).mul(300).toFixed(0),
+        amount: "1"
+      }
+    )
+  );
+}
+
 async function executeSwap(nearObjects, swapInfo) {
   const { account, tokenContract, NearConfig } = nearObjects;
   let tokenId = swapInfo.inTokenAccountId;
@@ -668,9 +709,8 @@ async function refSell(nearObjects, tokenId, amountIn) {
     return amountIn;
   }
 
-  const refFinance = await prepareRef(nearObjects);
-  const swapInfo = findBestReturn(
-    refFinance,
+  const swapInfo = findBestReturnBySmartRouter(
+    NearConfig.smartrouterUrl,
     tokenId,
     NearConfig.wrapNearAccountId,
     amountIn
@@ -684,21 +724,21 @@ async function refSell(nearObjects, tokenId, amountIn) {
   );
 
   let swapExchange = undefined;
-  if (swapInfo.pools && dclSwapInfo.poolId) {
+  if (swapInfo && dclSwapInfo.poolId) {
     if (swapInfo.amountOut.gt(dclSwapInfo.amountOut)) {
       swapExchange = 'exchange'
     } else {
       swapExchange = 'dcl'
     }
-  } else if (!swapInfo.pools && dclSwapInfo.poolId) {
+  } else if (!swapInfo && dclSwapInfo.poolId) {
     swapExchange = 'dcl'
-  } else if (swapInfo.pools && !dclSwapInfo.poolId) {
+  } else if (swapInfo && !dclSwapInfo.poolId) {
     swapExchange = 'exchange'
   }
 
   switch (swapExchange) {
     case "exchange":
-      await executeSwap(nearObjects, swapInfo)
+      await executeSmartRouterSwap(nearObjects, swapInfo)
         .then(() => {
           swapFailedConter = 0;
           rebalanceLogger.debug('refSell executeSwap succeeded');
@@ -730,13 +770,49 @@ async function refSell(nearObjects, tokenId, amountIn) {
         });
       break;
     default:
-      rebalanceLogger.warn("refSell", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
+      rebalanceLogger.warn("refSell", "in_token:", tokenId, "out_token:", NearConfig.wrapNearAccountId, "no suitable pool");
       await sleep(5000);
   }
 }
 
+const unwrapAndStake = async (
+  account,
+  wrapNearAccountId,
+  wrapNearBalance,
+  tokenId,
+  tokenAmount,
+  methodName,
+) => {
+  const tokenPrice = Big(await account.viewFunction({
+    contractId: tokenId,
+    methodName,
+    args: {}
+  }));
+  const unwrapAmount = tokenAmount.mul(tokenPrice).div(Big(10).pow(24)).round(0, 0);
+  if (wrapNearBalance.lt(unwrapAmount)) {
+    rebalanceLogger.warn("Needs", unwrapAmount.toFixed(0), "wrap to unwrap, but the account balance is only", wrapNearBalance.toFixed(0))
+    return;
+  }
+  await account.functionCall({
+    "contractId": wrapNearAccountId,
+    "methodName": "near_withdraw",
+    "args": {
+      "amount": unwrapAmount.toFixed(0),
+    },
+    "gas": Big(10).pow(12).mul(300).toFixed(0),
+    "attachedDeposit": "0",
+  });
+  await account.functionCall({
+    "contractId": tokenId,
+    "methodName": "deposit_and_stake",
+    "args": {},
+    "gas": Big(10).pow(12).mul(300).toFixed(0),
+    "attachedDeposit": unwrapAmount.toFixed(0),
+  });
+}
+
 async function refBuy(nearObjects, tokenId, amountOut) {
-  const { NearConfig, tokenContract, dclContract } = nearObjects;
+  const { account, NearConfig, tokenContract, dclContract } = nearObjects;
 
   if (tokenId === NearConfig.wrapNearAccountId) {
     return amountOut;
@@ -744,6 +820,39 @@ async function refBuy(nearObjects, tokenId, amountOut) {
 
   const wrapNearTokenContract = tokenContract(NearConfig.wrapNearAccountId);
   let wrapNearBalance = Big(await wrapNearTokenContract.ft_balance_of({ account_id: NearConfig.accountId }))
+
+  if (tokenId === NearConfig.rnearContractId) {
+    return await unwrapAndStake(
+      account,
+      NearConfig.wrapNearAccountId,
+      wrapNearBalance,
+      NearConfig.rnearContractId,
+      amountOut,
+      'ft_price'
+    );
+  }
+
+  if (tokenId === NearConfig.linearContractId) {
+    return await unwrapAndStake(
+      account,
+      NearConfig.wrapNearAccountId,
+      wrapNearBalance,
+      NearConfig.linearContractId,
+      amountOut,
+      'ft_price'
+    );
+  }
+
+  if (tokenId === NearConfig.stnearContractId) {
+    return await unwrapAndStake(
+      account,
+      NearConfig.wrapNearAccountId,
+      wrapNearBalance,
+      NearConfig.stnearContractId,
+      amountOut,
+      'get_st_near_price'
+    );
+  }
 
   const refFinance = await prepareRef(nearObjects);
   const swapInfo = findBestInverseReturn(
@@ -819,7 +928,7 @@ async function refBuy(nearObjects, tokenId, amountOut) {
         });
       break;
     default:
-      rebalanceLogger.warn("refBuy", "in_token:", swapInfo.inTokenAccountId, "out_token:", swapInfo.outTokenAccountId, "no suitable pool");
+      rebalanceLogger.warn("refBuy", "in_token:", NearConfig.wrapNearAccountId, "out_token:", tokenId, "no suitable pool");
       await sleep(5000);
   }
 }
