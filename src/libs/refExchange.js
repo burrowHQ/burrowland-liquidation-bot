@@ -403,6 +403,7 @@ const findBestReturnBySmartRouter = async (
   const responseJson = await response.json();
   if (responseJson.result_data && responseJson.result_data.args.amount == amountIn.toFixed(0)) {
     return {
+      inTokenAccountId,
       amountIn,
       amountOut: Big(responseJson.result_data.amountOut),
       msg: responseJson.result_data.args.msg
@@ -617,9 +618,7 @@ const findBestInverseReturn = (
 };
 
 async function executeSmartRouterSwap(nearObjects, swapInfo) {
-  const { account, tokenContract, NearConfig } = nearObjects;
-  let tokenId = swapInfo.inTokenAccountId;
-  let token = tokenContract(tokenId);
+  const { account, NearConfig } = nearObjects;
   return Big(
     await account.functionCall({
       "contractId": swapInfo.inTokenAccountId,
