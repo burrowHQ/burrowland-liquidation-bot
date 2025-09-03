@@ -619,19 +619,17 @@ const findBestInverseReturn = (
 
 async function executeSmartRouterSwap(nearObjects, swapInfo) {
   const { account, NearConfig } = nearObjects;
-  return Big(
-    await account.functionCall({
-      "contractId": swapInfo.inTokenAccountId,
-      "methodName": "ft_transfer_call",
-      "args": {
-        "receiver_id": NearConfig.refFinanceContractId,
-        "amount": swapInfo.amountIn.toFixed(0),
-        "msg": swapInfo.msg,
-      },
-      "gas": Big(10).pow(12).mul(300).toFixed(0),
-      "attachedDeposit": "1",
-    })
-  );
+  await account.functionCall({
+    "contractId": swapInfo.inTokenAccountId,
+    "methodName": "ft_transfer_call",
+    "args": {
+      "receiver_id": NearConfig.refFinanceContractId,
+      "amount": swapInfo.amountIn.toFixed(0),
+      "msg": swapInfo.msg,
+    },
+    "gas": Big(10).pow(12).mul(300).toFixed(0),
+    "attachedDeposit": "1",
+  })
 }
 
 async function executeSwap(nearObjects, swapInfo) {
