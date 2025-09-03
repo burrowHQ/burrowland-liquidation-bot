@@ -709,7 +709,7 @@ async function refSell(nearObjects, tokenId, amountIn) {
     return amountIn;
   }
 
-  const swapInfo = findBestReturnBySmartRouter(
+  const swapInfo = await findBestReturnBySmartRouter(
     NearConfig.smartrouterUrl,
     tokenId,
     NearConfig.wrapNearAccountId,
