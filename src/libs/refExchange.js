@@ -796,7 +796,7 @@ const unwrapAndStake = async (
       "amount": unwrapAmount.toFixed(0),
     },
     "gas": Big(10).pow(12).mul(300).toFixed(0),
-    "attachedDeposit": "0",
+    "attachedDeposit": "1",
   });
   await account.functionCall({
     "contractId": tokenId,
