@@ -239,7 +239,12 @@ async function main(nearObjects) {
         if (b.tokenId != NearConfig.xrheaContractId) {
           await refBuy(nearObjects, b.tokenId, b.tokenBalance);
         } else {
-          const xrheaPrice = Big(await token.get_virtual_price());
+
+          const xrheaPrice = Big(await account.viewFunction({
+            contractId: NearConfig.xrheaContractId,
+            methodName: 'get_virtual_price',
+            args: {}
+          }));
           const xrheaPriceDecimals = Big(100000000);
           const expectedRheaAmount = b.tokenBalance.mul(xrheaPrice).div(xrheaPriceDecimals).round(0, 3);
           await refBuy(nearObjects, NearConfig.rheaContractId, expectedRheaAmount);
