@@ -360,7 +360,7 @@ module.exports = {
 
         // Run stop keeper
         if (stopKeeper) {
-          await check_stop_positions(account, burrow_config, NearConfig, burrowContract, assets, prices, liquidator, rawMarginAccounts)
+          await check_stop_positions(account, burrow_config, NearConfig, burrowContract, assets, prices, rawMarginAccounts)
             .catch(error => {
               console.error("check_stop_positions failed:", error);
             });

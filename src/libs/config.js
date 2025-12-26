@@ -131,7 +131,8 @@ module.exports = {
 
     // stop keeper
     config.stopKeeper = process.env.STOP_KEEPER == 'true' || false;
-    config.stopKeeperOffsetBps = parseInt(process.env.STOP_KEEPER_OFFSET_BPS) || 0;
+    // Offset in BPS (0-5000), clamped to valid range to prevent logic inversion
+    config.stopKeeperOffsetBps = Math.min(Math.max(parseInt(process.env.STOP_KEEPER_OFFSET_BPS) || 0, 0), 5000);
 
     // rebalance
     config.minSwapAmount = Big(process.env.MIN_SWAP_AMOUNT || "1");

@@ -5,6 +5,12 @@ const log4js = require('log4js');
 
 const stopKeeperLogger = log4js.getLogger();
 
+// BPS (basis points) base: 10000 = 100%
+const BPS_BASE = 10000;
+
+// Batch size for smart router API calls to avoid rate limiting
+const SMART_ROUTER_BATCH_SIZE = 10;
+
 /**
  * Check if stop condition is met
  * Replicates contract's is_stop_active logic with configurable offset
@@ -28,23 +34,25 @@ const isStopActive = (position, offsetBps = 0) => {
   const totalDebt = token_d_price_balance.add(hp_fee_price_balance);
 
   // Check stop loss: current_remain < target_remain
-  // Formula: (position + collateral) < collateral * stop_loss / 10000 + debt + hp_fee
-  // With offset: stop_loss_adjusted = stop_loss * (10000 - offset) / 10000
-  if (stop.stop_loss) {
-    const adjustedStopLoss = Big(stop.stop_loss).mul(Big(10000 - offsetBps)).div(Big(10000));
-    const targetRemain = token_c_price_balance.mul(adjustedStopLoss).div(Big(10000));
+  // Formula: (position + collateral) < collateral * stop_loss / BPS_BASE + debt + hp_fee
+  // With offset: stop_loss_adjusted = stop_loss * (BPS_BASE - offset) / BPS_BASE
+  // Valid range: 1-9999 BPS (contract validation)
+  if (stop.stop_loss && stop.stop_loss > 0 && stop.stop_loss < BPS_BASE) {
+    const adjustedStopLoss = Big(stop.stop_loss).mul(Big(BPS_BASE - offsetBps)).div(Big(BPS_BASE));
+    const targetRemain = token_c_price_balance.mul(adjustedStopLoss).div(Big(BPS_BASE));
     if (totalCap.lt(targetRemain.add(totalDebt))) {
       return { triggered: true, type: 'stop_loss' };
     }
   }
 
   // Check take profit: current_remain > target_remain
-  // Formula: (position + collateral) > collateral * stop_profit / 10000 + debt + hp_fee
-  // With offset: stop_profit_adjusted = stop_profit + (stop_profit - 10000) * offset / 10000
-  if (stop.stop_profit) {
-    const profitMargin = Big(stop.stop_profit).sub(Big(10000));
-    const adjustedStopProfit = Big(stop.stop_profit).add(profitMargin.mul(Big(offsetBps)).div(Big(10000)));
-    const targetRemain = token_c_price_balance.mul(adjustedStopProfit).div(Big(10000));
+  // Formula: (position + collateral) > collateral * stop_profit / BPS_BASE + debt + hp_fee
+  // With offset: stop_profit_adjusted = stop_profit + (stop_profit - BPS_BASE) * offset / BPS_BASE
+  // Valid range: > BPS_BASE (contract validation)
+  if (stop.stop_profit && stop.stop_profit > BPS_BASE) {
+    const profitMargin = Big(stop.stop_profit).sub(Big(BPS_BASE));
+    const adjustedStopProfit = Big(stop.stop_profit).add(profitMargin.mul(Big(offsetBps)).div(Big(BPS_BASE)));
+    const targetRemain = token_c_price_balance.mul(adjustedStopProfit).div(Big(BPS_BASE));
     if (totalCap.gt(targetRemain.add(totalDebt))) {
       return { triggered: true, type: 'take_profit' };
     }
@@ -64,6 +72,14 @@ const processStopPosition = async (a, assets, prices, NearConfig) => {
   a.d_price = prices?.prices[a.token_d_info.token_id];
   a.p_price = prices?.prices[a.token_p_id];
 
+  // Validate that all required data exists
+  if (!a.c_asset || !a.d_asset || !a.p_asset || !a.c_price || !a.d_price || !a.p_price) {
+    stopKeeperLogger.warn(`Missing asset or price data for position ${a.accountId}:${a.position}, skipping`);
+    a.stopTriggered = false;
+    a.actions = null;
+    return a;
+  }
+
   // Calculate USD values
   a.token_c_price_balance = a.token_c_info.balance
     .mul(a.c_price.multiplier)
@@ -77,6 +93,9 @@ const processStopPosition = async (a, assets, prices, NearConfig) => {
 
   // Calculate HP fee
   const hp_fee = a.debt_cap.mul(a.d_asset.unitAccHpInterest.sub(a.uahpi_at_open)).div(Big(10).pow(18));
+  if (hp_fee.lt(Big(0))) {
+    stopKeeperLogger.warn(`Negative HP fee detected for ${a.accountId}:${a.position}, treating as zero`);
+  }
   a.hp_fee_price_balance = hp_fee.gt(Big(0)) ? hp_fee.mul(a.d_price.multiplier)
     .div(Big(10).pow(a.d_price.decimals + a.d_asset.config.extraDecimals)) : Big(0);
 
@@ -117,7 +136,7 @@ const processStopPosition = async (a, assets, prices, NearConfig) => {
         }
       }];
     } else {
-      stopKeeperLogger.error("Missing swap route for stop: " + a.token_p_id + " -> " + a.token_d_info.token_id);
+      stopKeeperLogger.error(`Missing swap route for stop: ${a.token_p_id} -> ${a.token_d_info.token_id}`);
       a.actions = null;
     }
   } else {
@@ -157,10 +176,10 @@ const executeStop = async (account, NearConfig, actions, burrow_config) => {
 
 /**
  * Main stop keeper function
- * liquidator and rawMarginAccounts are passed from burrow.js to avoid duplicate RPC calls
+ * rawMarginAccounts is passed from burrow.js to avoid duplicate RPC calls
  */
 module.exports = {
-  main: async (account, burrow_config, NearConfig, burrowContract, assets, prices, liquidator, rawMarginAccounts) => {
+  main: async (account, burrow_config, NearConfig, burrowContract, assets, prices, rawMarginAccounts) => {
     stopKeeperLogger.info('Stop Keeper Begin');
 
     // Parse and filter positions with stops
@@ -171,10 +190,16 @@ module.exports = {
 
     stopKeeperLogger.debug(`Found ${stopPositions.length} positions with active stops`);
 
-    // Process each position (check conditions, get swap routes)
-    stopPositions = await Promise.all(
-      stopPositions.map(pos => processStopPosition(pos, assets, prices, NearConfig))
-    );
+    // Process positions in batches to avoid overwhelming smart router API
+    const processedPositions = [];
+    for (let i = 0; i < stopPositions.length; i += SMART_ROUTER_BATCH_SIZE) {
+      const batch = stopPositions.slice(i, i + SMART_ROUTER_BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(pos => processStopPosition(pos, assets, prices, NearConfig))
+      );
+      processedPositions.push(...batchResults);
+    }
+    stopPositions = processedPositions;
 
     // Filter to triggered stops with valid actions
     const triggeredStops = stopPositions.filter(a => a.stopTriggered && a.actions !== null);

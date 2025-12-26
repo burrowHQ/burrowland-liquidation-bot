@@ -152,12 +152,12 @@ burrowContract.margin_execute_with_pyth({ actions })
 
 ## Configuration
 
-| Environment Variable | Description | Default |
-|---------------------|-------------|---------|
-| `STOP_KEEPER` | Enable stop keeper | `false` |
-| `STOP_KEEPER_OFFSET_BPS` | Offset in BPS to trigger stops earlier (see below) | `0` |
-| `MARGIN_PAGED_LIMIT` | Page size for fetching margin accounts | `150` |
-| `MAX_SLIPPAGE` | Maximum slippage for swaps (%) | `0.5` |
+| Environment Variable | Description | Default | Range |
+|---------------------|-------------|---------|-------|
+| `STOP_KEEPER` | Enable stop keeper | `false` | - |
+| `STOP_KEEPER_OFFSET_BPS` | Offset in BPS to trigger stops earlier (see below) | `0` | 0-5000 |
+| `MARGIN_PAGED_LIMIT` | Page size for fetching margin accounts | `150` | - |
+| `MAX_SLIPPAGE` | Maximum slippage for swaps (%) | `0.5` | - |
 
 ### Offset for Price Movement
 
@@ -192,6 +192,14 @@ export STOP_KEEPER_OFFSET_BPS=1000
 - **Shared RPC calls**: Margin accounts and liquidator registration are fetched once in `burrow.js` and shared with both margin liquidation and stop keeper, reducing duplicate RPC access
 - **No profit threshold**: Stops are triggered whenever conditions are met, regardless of service fee value (the fee is set by the position owner)
 - **Slippage = 0 for checks**: The contract checks stop conditions without slippage, but actual swaps use `MAX_SLIPPAGE`
+
+## Safety Features
+
+- **Null check validation**: Positions with missing asset or price data are skipped with a warning log
+- **Input validation**: Stop values are validated against contract rules (stop_loss: 1-9999 BPS, stop_profit: >10000 BPS)
+- **Offset clamping**: The offset BPS is clamped to 0-5000 range to prevent logic inversion from misconfiguration
+- **Batch processing**: Smart router API calls are processed in batches of 10 to avoid rate limiting
+- **Edge case logging**: Anomalies like negative HP fees are logged for debugging
 
 ## Relationship to Margin Liquidation
 
