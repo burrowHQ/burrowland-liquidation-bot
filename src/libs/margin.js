@@ -172,13 +172,8 @@ const margin_execute_with_pyth_oracle = async (account, NearConfig, actions, isD
 
 module.exports = {
   parseAccount,
-  main: async (account, burrow_config, NearConfig, burrowContract, assets, prices, marginLiquidate, marginForceClose) => {
-    const liquidator = await burrowContract.get_margin_account({ account_id: NearConfig.accountId });
-    if (!liquidator) {
-      liquidateLogger.error(`${NearConfig.accountId} has not registered ${NearConfig.burrowContractId}`);
-      return;
-    }
-    // const margin_config = await burrowContract.get_margin_config();
+  main: async (account, burrow_config, NearConfig, burrowContract, assets, prices, marginLiquidate, marginForceClose, liquidator, rawMarginAccounts) => {
+    // liquidator and rawMarginAccounts are now passed from burrow.js to avoid duplicate RPC calls
     const marginBaseTokenLimitPaged = await account.viewFunction({
       "contractId": NearConfig.burrowContractId,
       "methodName": "get_margin_base_token_limit_paged",
@@ -189,22 +184,8 @@ module.exports = {
       "methodName": "get_default_margin_base_token_limit",
       "args": {}
     });
-    
-    const numAccountsStr = await burrowContract.get_num_margin_accounts();
-    const numAccounts = parseInt(numAccountsStr);
-    liquidateLogger.debug("Num marginn accounts: ", numAccounts);
 
-    const limit = NearConfig.marginPagedLimit;
-
-    const promises = [];
-    for (let i = 0; i < numAccounts; i += limit) {
-      promises.push(
-        burrowContract.get_margin_accounts_paged({ from_index: i, limit })
-      );
-    }
-
-    let accounts = (await Promise.all(promises))
-      .flat()
+    let accounts = rawMarginAccounts
       .map((a) => parseAccount(a))
       .flat()
       .filter((a) => !a.is_locking)

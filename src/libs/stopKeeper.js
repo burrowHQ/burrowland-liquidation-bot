@@ -157,48 +157,31 @@ const executeStop = async (account, NearConfig, actions, burrow_config) => {
 
 /**
  * Main stop keeper function
+ * liquidator and rawMarginAccounts are passed from burrow.js to avoid duplicate RPC calls
  */
 module.exports = {
-  main: async (account, burrow_config, NearConfig, burrowContract, assets, prices) => {
+  main: async (account, burrow_config, NearConfig, burrowContract, assets, prices, liquidator, rawMarginAccounts) => {
     stopKeeperLogger.info('Stop Keeper Begin');
 
-    // 1. Check liquidator registration
-    const liquidator = await burrowContract.get_margin_account({ account_id: NearConfig.accountId });
-    if (!liquidator) {
-      stopKeeperLogger.error(`${NearConfig.accountId} has not registered ${NearConfig.burrowContractId}`);
-      return;
-    }
-
-    // 2. Fetch all margin accounts (paginated)
-    const numAccountsStr = await burrowContract.get_num_margin_accounts();
-    const numAccounts = parseInt(numAccountsStr);
-    const limit = NearConfig.marginPagedLimit;
-
-    const promises = [];
-    for (let i = 0; i < numAccounts; i += limit) {
-      promises.push(burrowContract.get_margin_accounts_paged({ from_index: i, limit }));
-    }
-
-    // 3. Parse and filter positions with stops
-    let stopPositions = (await Promise.all(promises))
-      .flat()
+    // Parse and filter positions with stops
+    let stopPositions = rawMarginAccounts
       .map(a => parseAccount(a))
       .flat()
       .filter(a => !a.is_locking && a.stop !== null);
 
     stopKeeperLogger.debug(`Found ${stopPositions.length} positions with active stops`);
 
-    // 4. Process each position (check conditions, get swap routes)
+    // Process each position (check conditions, get swap routes)
     stopPositions = await Promise.all(
       stopPositions.map(pos => processStopPosition(pos, assets, prices, NearConfig))
     );
 
-    // 5. Filter to triggered stops with valid actions
+    // Filter to triggered stops with valid actions
     const triggeredStops = stopPositions.filter(a => a.stopTriggered && a.actions !== null);
 
     stopKeeperLogger.debug(`${triggeredStops.length} stops triggered`);
 
-    // 6. Execute a random triggered stop (randomize to avoid competition between keepers)
+    // Execute a random triggered stop (randomize to avoid competition between keepers)
     if (triggeredStops.length > 0) {
       const randomIndex = Math.floor(Math.random() * triggeredStops.length);
       const pos = triggeredStops[randomIndex];

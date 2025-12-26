@@ -110,30 +110,31 @@ When a stop is successfully executed by the keeper:
 ## Execution Flow
 
 ```
-1. Check liquidator registration
-   └── Verify keeper account is registered with Burrow
+1. Shared setup (in burrow.js, shared with margin liquidation)
+   ├── Check liquidator registration
+   ├── Fetch margin accounts via get_margin_accounts_paged()
+   └── Pass accounts to both margin liquidation and stop keeper
 
-2. Fetch margin accounts
-   └── get_margin_accounts_paged() with pagination
-
-3. Parse and filter positions with stops
+2. Parse and filter positions with stops
    ├── Parse each account's margin_positions (including stops)
    ├── Filter out locked positions (is_locking = true)
    └── Filter to positions with stop != null
 
-4. Process each position
+3. Process each position
    ├── Calculate USD values for all tokens
    ├── Calculate hp_fee (holding position interest)
-   ├── Check stop conditions (stop_loss and stop_profit)
+   ├── Check stop conditions with offset (stop_loss and stop_profit)
    └── Get swap route from smart router for token_p → token_d
 
-5. Filter triggered stops
+4. Filter triggered stops
    └── Keep only positions where stopTriggered = true and actions != null
 
-6. Execute (one at a time, randomly selected)
+5. Execute (one at a time, randomly selected)
    ├── Randomly select one from triggered stops (avoids keeper competition)
    └── Call oracle-based execution method
 ```
+
+**Note**: Margin accounts are fetched once and shared between margin liquidation and stop keeper to reduce RPC calls.
 
 ## Oracle Execution Methods
 
@@ -188,6 +189,7 @@ export STOP_KEEPER_OFFSET_BPS=1000
 - **One at a time execution**: Only one triggered stop is executed per loop cycle for safety
 - **Random selection**: When multiple stops are triggered, one is randomly selected to avoid competition between multiple keepers (all keepers picking the same stop would waste gas)
 - **Configurable offset**: The `STOP_KEEPER_OFFSET_BPS` allows triggering stops earlier to account for price movement between off-chain check and on-chain execution, reducing failed transactions
+- **Shared RPC calls**: Margin accounts and liquidator registration are fetched once in `burrow.js` and shared with both margin liquidation and stop keeper, reducing duplicate RPC access
 - **No profit threshold**: Stops are triggered whenever conditions are met, regardless of service fee value (the fee is set by the position owner)
 - **Slippage = 0 for checks**: The contract checks stop conditions without slippage, but actual swaps use `MAX_SLIPPAGE`
 

@@ -331,17 +331,41 @@ module.exports = {
         }
       }
     }
-    if (marginLiquidate || marginForceClose) {
-      await check_margin_position(account, burrow_config, NearConfig, burrowContract, assets, prices, marginLiquidate, marginForceClose)
-        .catch(error => {
-          console.error("check_margin_position failed:", error);
-        })
-    }
-    if (stopKeeper) {
-      await check_stop_positions(account, burrow_config, NearConfig, burrowContract, assets, prices)
-        .catch(error => {
-          console.error("check_stop_positions failed:", error);
-        });
+    // Fetch margin accounts once for both margin liquidation and stop keeper
+    if (marginLiquidate || marginForceClose || stopKeeper) {
+      // Check liquidator registration
+      const liquidator = await burrowContract.get_margin_account({ account_id: NearConfig.accountId });
+      if (!liquidator) {
+        liquidateLogger.error(`${NearConfig.accountId} has not registered margin account on ${NearConfig.burrowContractId}`);
+      } else {
+        // Fetch all margin accounts (paginated)
+        const numAccountsStr = await burrowContract.get_num_margin_accounts();
+        const numAccounts = parseInt(numAccountsStr);
+        liquidateLogger.debug("Num margin accounts:", numAccounts);
+
+        const limit = NearConfig.marginPagedLimit;
+        const promises = [];
+        for (let i = 0; i < numAccounts; i += limit) {
+          promises.push(burrowContract.get_margin_accounts_paged({ from_index: i, limit }));
+        }
+        const rawMarginAccounts = (await Promise.all(promises)).flat();
+
+        // Run margin liquidation/forceclose
+        if (marginLiquidate || marginForceClose) {
+          await check_margin_position(account, burrow_config, NearConfig, burrowContract, assets, prices, marginLiquidate, marginForceClose, liquidator, rawMarginAccounts)
+            .catch(error => {
+              console.error("check_margin_position failed:", error);
+            });
+        }
+
+        // Run stop keeper
+        if (stopKeeper) {
+          await check_stop_positions(account, burrow_config, NearConfig, burrowContract, assets, prices, liquidator, rawMarginAccounts)
+            .catch(error => {
+              console.error("check_stop_positions failed:", error);
+            });
+        }
+      }
     }
   },
 };
