@@ -87,6 +87,13 @@ export MARGIN_FORCE_CLOSE=false
 export MARGIN_PAGED_LIMIT=150
 
 
+######## STOP KEEPER SECTION ########
+# default to false, switch of stop keeper for margin positions
+export STOP_KEEPER=false
+# default to 0, offset in BPS to account for price movement between off-chain check and on-chain execution
+# e.g., 1000 (10%) means: stop_profit 130% triggers at 133%, stop_loss 70% triggers at 63%
+export STOP_KEEPER_OFFSET_BPS=0
+
 
 cd $(dirname "$0")
 node ./src/liquidate.js 2>&1 

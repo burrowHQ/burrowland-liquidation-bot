@@ -22,6 +22,7 @@ const parseAccount = (a) => {
       token_p_id: positionInfo.token_p_id,
       token_p_amount: Big(positionInfo.token_p_amount),
       is_locking: positionInfo.is_locking,
+      stop: a.stops?.[position] || null,
     })
     return allPositions;
   }, []);
@@ -170,6 +171,7 @@ const margin_execute_with_pyth_oracle = async (account, NearConfig, actions, isD
 }
 
 module.exports = {
+  parseAccount,
   main: async (account, burrow_config, NearConfig, burrowContract, assets, prices, marginLiquidate, marginForceClose) => {
     const liquidator = await burrowContract.get_margin_account({ account_id: NearConfig.accountId });
     if (!liquidator) {

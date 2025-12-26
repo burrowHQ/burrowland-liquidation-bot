@@ -4,6 +4,7 @@ const { keysToCamel, printOutcome, sleep } = require("./utils");
 const { parseAsset } = require("./asset");
 const { getPythPrices, getPriceOralcePrices } = require("./priceData");
 const { main: check_margin_position } = require("./margin");
+const { main: check_stop_positions } = require("./stopKeeper");
 const {
   parseAccount,
   parseAccountDetailed,
@@ -97,7 +98,7 @@ const execute_with_pyth_oracle = async (account, NearConfig, actions) => {
 }
 
 module.exports = {
-  main: async (nearObjects, { liquidate = false, forceClose = false, marginLiquidate = false, marginForceClose = false } = {}) => {
+  main: async (nearObjects, { liquidate = false, forceClose = false, marginLiquidate = false, marginForceClose = false, stopKeeper = false } = {}) => {
     liquidateLogger.info('Liquidate Begin');
     const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, NearConfig } = nearObjects;
     const signerString = JSON.stringify(await burrowContract.get_account({
@@ -335,6 +336,12 @@ module.exports = {
         .catch(error => {
           console.error("check_margin_position failed:", error);
         })
+    }
+    if (stopKeeper) {
+      await check_stop_positions(account, burrow_config, NearConfig, burrowContract, assets, prices)
+        .catch(error => {
+          console.error("check_stop_positions failed:", error);
+        });
     }
   },
 };

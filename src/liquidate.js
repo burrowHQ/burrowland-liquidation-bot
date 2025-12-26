@@ -30,6 +30,7 @@ initNear(true).then((nearObject) => {
       forceClose: nearObject.NearConfig.forceClose,
       marginLiquidate: nearObject.NearConfig.marginLiquidate,
       marginForceClose: nearObject.NearConfig.marginForceClose,
+      stopKeeper: nearObject.NearConfig.stopKeeper,
     }).then(() => {
       liquidateLogger.info('Liquidate End');
       setTimeout(executeAsyncOperation, nearObject.NearConfig.loopInterval);

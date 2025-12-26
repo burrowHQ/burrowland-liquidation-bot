@@ -71,3 +71,7 @@ test_*
 run.sh
 rebalance.sh
 reg_liquidator.sh
+
+CLAUDE.md
+docs/*-plan.md
+external-project

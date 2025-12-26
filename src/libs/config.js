@@ -129,6 +129,10 @@ module.exports = {
     config.marginTopN = process.env.MARGIN_TOPN || 50;
     config.marginPagedLimit = parseInt(process.env.MARGIN_PAGED_LIMIT) || 150;
 
+    // stop keeper
+    config.stopKeeper = process.env.STOP_KEEPER == 'true' || false;
+    config.stopKeeperOffsetBps = parseInt(process.env.STOP_KEEPER_OFFSET_BPS) || 0;
+
     // rebalance
     config.minSwapAmount = Big(process.env.MIN_SWAP_AMOUNT || "1");
     config.minRepayAmount = Big(process.env.MIN_REPAY_AMOUNT || "0.5");
