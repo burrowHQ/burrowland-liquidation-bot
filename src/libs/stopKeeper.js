@@ -106,9 +106,39 @@ const processStopPosition = async (a, assets, prices, NearConfig) => {
 
   // If triggered, get swap route and construct action
   if (a.stopTriggered) {
-    const tokenPAmountBD = a.token_c_info.token_id == a.token_d_info.token_id
-      ? a.token_p_amount
-      : a.token_p_amount.add(a.token_c_info.balance);
+    // Determine how much token_p to include in the swap.
+    // Goal: user should receive collateral token (token_c) at the end, not debt token (token_d).
+    let tokenPAmountBD;
+    if (a.token_c_info.token_id == a.token_d_info.token_id) {
+      // Long position: collateral == debt token (e.g. USDC collateral, USDC debt, NEAR position)
+      // Only swap position token; collateral stays as token_c automatically.
+      tokenPAmountBD = a.token_p_amount;
+    } else {
+      // Short position: collateral != debt (implies token_c == token_p, e.g. USDC collateral/position, NEAR debt)
+      // User wants USDC (token_c) back, not NEAR (token_d).
+      // Swap only the minimum amount of token_p needed to cover total debt after slippage.
+      // Remaining position tokens are also returned to the user as token_p shares (same token as collateral).
+      const totalDebtUsd = a.token_d_price_balance.add(a.hp_fee_price_balance);
+      const slippageDivisor = Big(1).sub(NearConfig.maxSlippage.div(100));
+
+      // Minimum input needed so that output after slippage >= total debt
+      const neededInputUsd = totalDebtUsd.div(slippageDivisor);
+      const neededTokenP = neededInputUsd
+        .mul(Big(10).pow(a.p_price.decimals + a.p_asset.config.extraDecimals))
+        .div(a.p_price.multiplier)
+        .round(0, 3); // round up to be conservative
+
+      if (neededTokenP.lte(a.token_p_amount)) {
+        // Position alone covers debt; swap only what's needed, return the rest as USDC.
+        tokenPAmountBD = neededTokenP;
+      } else {
+        // Position alone is insufficient; take the shortfall from collateral (clamped to available).
+        const additionalFromCollateral = neededTokenP.sub(a.token_p_amount).lte(a.token_c_info.balance)
+          ? neededTokenP.sub(a.token_p_amount)
+          : a.token_c_info.balance;
+        tokenPAmountBD = a.token_p_amount.add(additionalFromCollateral);
+      }
+    }
     const tokenPAmountSTDD = tokenPAmountBD.div(Big(10).pow(a.p_asset.config.extraDecimals)).round(0, 0);
 
     const swapMsg = await getRefExchangeSwapMsg(
