@@ -22,8 +22,8 @@ const SMART_ROUTER_BATCH_SIZE = 10;
  * off-chain evaluation and on-chain execution:
  * - For stop_profit: adjusted = stop_profit + (stop_profit - 10000) * offset / 10000
  *   Example: 130% with 10% offset → 133%
- * - For stop_loss: adjusted = stop_loss * (10000 - offset) / 10000
- *   Example: 70% with 10% offset → 63%
+ * - For stop_loss: adjusted = stop_loss - (10000 - stop_loss) * offset / 10000
+ *   Example: 70% with 10% offset → 67%
  */
 const isStopActive = (position, offsetBps = 0) => {
   const { token_c_price_balance, token_d_price_balance, token_p_price_balance, hp_fee_price_balance, stop } = position;
@@ -35,10 +35,11 @@ const isStopActive = (position, offsetBps = 0) => {
 
   // Check stop loss: current_remain < target_remain
   // Formula: (position + collateral) < collateral * stop_loss / BPS_BASE + debt + hp_fee
-  // With offset: stop_loss_adjusted = stop_loss * (BPS_BASE - offset) / BPS_BASE
+  // With offset: stop_loss_adjusted = stop_loss - (BPS_BASE - stop_loss) * offset / BPS_BASE
   // Valid range: 1-9999 BPS (contract validation)
   if (stop.stop_loss && stop.stop_loss > 0 && stop.stop_loss < BPS_BASE) {
-    const adjustedStopLoss = Big(stop.stop_loss).mul(Big(BPS_BASE - offsetBps)).div(Big(BPS_BASE));
+    const lossMargin = Big(BPS_BASE).sub(Big(stop.stop_loss));
+    const adjustedStopLoss = Big(stop.stop_loss).sub(lossMargin.mul(Big(offsetBps)).div(Big(BPS_BASE)));
     const targetRemain = token_c_price_balance.mul(adjustedStopLoss).div(Big(BPS_BASE));
     if (totalCap.lt(targetRemain.add(totalDebt))) {
       return { triggered: true, type: 'stop_loss' };
@@ -122,7 +123,8 @@ const processStopPosition = async (a, assets, prices, NearConfig) => {
       const slippageDivisor = Big(1).sub(NearConfig.maxSlippage.div(100));
 
       // Minimum input needed so that output after slippage >= total debt
-      const neededInputUsd = totalDebtUsd.div(slippageDivisor);
+      // div(0.999): ~0.1% buffer to cover interest accrued between off-chain calculation and on-chain execution
+      const neededInputUsd = totalDebtUsd.div(0.999).div(slippageDivisor);
       const neededTokenP = neededInputUsd
         .mul(Big(10).pow(a.p_price.decimals + a.p_asset.config.extraDecimals))
         .div(a.p_price.multiplier)
