@@ -133,6 +133,8 @@ module.exports = {
     config.stopKeeper = process.env.STOP_KEEPER == 'true' || false;
     // Offset in BPS (0-5000), clamped to valid range to prevent logic inversion
     config.stopKeeperOffsetBps = Math.min(Math.max(parseInt(process.env.STOP_KEEPER_OFFSET_BPS) || 0, 0), 5000);
+    // Interest buffer rate for short position debt coverage (e.g. 0.995 = 0.5% buffer)
+    config.interestBufferRate = Big(process.env.INTEREST_BUFFER_RATE || "0.995");
 
     // rebalance
     config.minSwapAmount = Big(process.env.MIN_SWAP_AMOUNT || "1");

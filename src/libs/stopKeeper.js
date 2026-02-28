@@ -123,8 +123,8 @@ const processStopPosition = async (a, assets, prices, NearConfig) => {
       const slippageDivisor = Big(1).sub(NearConfig.maxSlippage.div(100));
 
       // Minimum input needed so that output after slippage >= total debt
-      // div(0.999): ~0.1% buffer to cover interest accrued between off-chain calculation and on-chain execution
-      const neededInputUsd = totalDebtUsd.div(0.999).div(slippageDivisor);
+      // interestBufferRate: buffer to cover interest accrued between off-chain calculation and on-chain execution
+      const neededInputUsd = totalDebtUsd.div(NearConfig.interestBufferRate).div(slippageDivisor);
       const neededTokenP = neededInputUsd
         .mul(Big(10).pow(a.p_price.decimals + a.p_asset.config.extraDecimals))
         .div(a.p_price.multiplier)
