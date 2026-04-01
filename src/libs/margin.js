@@ -124,7 +124,7 @@ const processAccount = async (a, assets, prices, NearConfig, marginBaseTokenLimi
   return a;
 }
 
-const margin_execute_with_price_oracle = async (account, NearConfig, actions, isDirectMode=false) => {
+const margin_execute_with_price_oracle = async (txSender, NearConfig, actions, isDirectMode=false) => {
   const msg = isDirectMode ? JSON.stringify({
     Execute: {
       actions
@@ -134,7 +134,7 @@ const margin_execute_with_price_oracle = async (account, NearConfig, actions, is
       actions
     }
   });
-  return await account.functionCall({
+  return await txSender.sendFunctionCall({
     "contractId": NearConfig.priceOracleContractId,
     "methodName": "oracle_call",
     "args": {
@@ -146,9 +146,9 @@ const margin_execute_with_price_oracle = async (account, NearConfig, actions, is
   });
 }
 
-const margin_execute_with_pyth_oracle = async (account, NearConfig, actions, isDirectMode=false) => {
+const margin_execute_with_pyth_oracle = async (txSender, NearConfig, actions, isDirectMode=false) => {
   if (isDirectMode) {
-    return await account.functionCall({
+    return await txSender.sendFunctionCall({
       "contractId": NearConfig.burrowContractId,
       "methodName": "execute_with_pyth",
       "args": {
@@ -158,7 +158,7 @@ const margin_execute_with_pyth_oracle = async (account, NearConfig, actions, isD
       "attachedDeposit": "1",
     });
   } else {
-    return await account.functionCall({
+    return await txSender.sendFunctionCall({
       "contractId": NearConfig.burrowContractId,
       "methodName": "margin_execute_with_pyth",
       "args": {
@@ -172,7 +172,7 @@ const margin_execute_with_pyth_oracle = async (account, NearConfig, actions, isD
 
 module.exports = {
   parseAccount,
-  main: async (account, burrow_config, NearConfig, burrowContract, assets, prices, marginLiquidate, marginForceClose, liquidator, rawMarginAccounts) => {
+  main: async (account, burrow_config, NearConfig, txSender, assets, prices, marginLiquidate, marginForceClose, liquidator, rawMarginAccounts) => {
     // liquidator and rawMarginAccounts are now passed from burrow.js to avoid duplicate RPC calls
     const marginBaseTokenLimitPaged = await account.viewFunction({
       "contractId": NearConfig.burrowContractId,
@@ -228,8 +228,8 @@ module.exports = {
           liquidateLogger.debug("liquidation action:");
           liquidateLogger.debug(JSON.stringify(liquidationAccounts[0].actions, undefined, 2));
           const outcome = burrow_config.enable_price_oracle ?
-            await margin_execute_with_price_oracle(account, NearConfig, liquidationAccounts[0].actions, NearConfig.marginLiquidateDirectMode) :
-            await margin_execute_with_pyth_oracle(account, NearConfig, liquidationAccounts[0].actions, NearConfig.marginLiquidateDirectMode);
+            await margin_execute_with_price_oracle(txSender, NearConfig, liquidationAccounts[0].actions, NearConfig.marginLiquidateDirectMode) :
+            await margin_execute_with_pyth_oracle(txSender, NearConfig, liquidationAccounts[0].actions, NearConfig.marginLiquidateDirectMode);
           printOutcome("margin liquidation", "./logs/margin_liquidation_success.log", outcome)
         }
       }
@@ -244,8 +244,8 @@ module.exports = {
           liquidateLogger.debug("forceclose action:");
           liquidateLogger.debug(JSON.stringify(forcecloseAccounts[0].actions, undefined, 2));
           const outcome = burrow_config.enable_price_oracle ?
-            await margin_execute_with_price_oracle(account, NearConfig, forcecloseAccounts[0].actions) :
-            await margin_execute_with_pyth_oracle(account, NearConfig, forcecloseAccounts[0].actions);
+            await margin_execute_with_price_oracle(txSender, NearConfig, forcecloseAccounts[0].actions) :
+            await margin_execute_with_pyth_oracle(txSender, NearConfig, forcecloseAccounts[0].actions);
           printOutcome("margin force_close", "./logs/margin_force_close_success.log", outcome)
         }
       }
@@ -275,7 +275,7 @@ module.exports = {
 
       if (withdrawActions.length > 0) {
         liquidateLogger.debug(JSON.stringify(withdrawActions, undefined, 2))
-        await account.functionCall({
+        await txSender.sendFunctionCall({
           "contractId": NearConfig.burrowContractId,
           "methodName": "margin_execute",
           "args": {

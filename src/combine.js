@@ -9,7 +9,7 @@ if (!process.env.NEAR_ACCOUNT_ID) {
     throw "Missing NEAR_ACCOUNT_ID"
 }
 
-if (process.env.DOCKER_ENV == 'true') {
+if (process.env.DOCKER_ENV == 'true' && (process.env.NEAR_TX_SIGNING_MODE || 'local') !== 'remote') {
     if (!process.env.ENCODE_PRIVATE_KEY) {
         throw "Missing ENCODE_PRIVATE_KEY"
     }

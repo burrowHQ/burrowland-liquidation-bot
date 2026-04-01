@@ -6,13 +6,13 @@ Big.DP = 27;
 
 async function main(nearObjects, tokenRegisterAlreadyCheckList=[]) {
     registerLogger.info('Register Begin');
-    const { account, tokenContract, burrowContract, NearConfig } = nearObjects;
+    const { account, tokenContract, burrowContract, txSender, NearConfig } = nearObjects;
 
     // try to read liquidator account from burrowland
     const burrowAccount = await burrowContract.get_account({ account_id: process.env.TARGET_NEAR_ACCOUNT_ID ? process.env.TARGET_NEAR_ACCOUNT_ID : account.accountId })
     if (burrowAccount == null) {
         registerLogger.info(`Paying storage for burrowContract`);
-        await account.functionCall({
+        await txSender.sendFunctionCall({
             "contractId": NearConfig.burrowContractId,
             "methodName": "storage_deposit",
             "args": {
@@ -37,7 +37,7 @@ async function main(nearObjects, tokenRegisterAlreadyCheckList=[]) {
     if (refFinanceAccount == null) {
         registerLogger.info(`Paying storage for refFinanceContract`);
         // account in ref exchange
-        await account.functionCall({
+        await txSender.sendFunctionCall({
             "contractId": NearConfig.refFinanceContractId,
             "methodName": "storage_deposit",
             "args": {
@@ -65,7 +65,7 @@ async function main(nearObjects, tokenRegisterAlreadyCheckList=[]) {
             });
             if (Big(storageBalance?.total || 0).eq(0)) {
                 registerLogger.info(`Paying storage for ${tokenId}\n`);
-                await account.functionCall({
+                await txSender.sendFunctionCall({
                     "contractId": tokenId,
                     "methodName": "storage_deposit",
                     "args": {

@@ -12,7 +12,7 @@ Big.DP = 27;
 
 async function main(nearObjects) {
   rebalanceLogger.info('Rebalance Begin');
-  const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, pythOracleContract, rheaContract, xrheaContract, NearConfig } =
+  const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, pythOracleContract, rheaContract, xrheaContract, txSender, NearConfig } =
     nearObjects;
 
   const burrowContractAccount = await burrowContract.get_account({
@@ -68,28 +68,27 @@ async function main(nearObjects) {
         rebalanceLogger.debug(
           `Depositing ${b.tokenId} amount ${amount.toFixed(0)} and repaying`
         );
-        await token.ft_transfer_call(
-          {
-            signerAccount: account,
-            args: {
-              receiver_id: NearConfig.burrowContractId,
-              amount: amount.toFixed(0),
-              msg: JSON.stringify({
-                Execute: {
-                  actions: [
-                    {
-                      Repay: {
-                        token_id: b.tokenId,
-                      },
+        await txSender.sendFunctionCall({
+          contractId: b.tokenId,
+          methodName: "ft_transfer_call",
+          args: {
+            receiver_id: NearConfig.burrowContractId,
+            amount: amount.toFixed(0),
+            msg: JSON.stringify({
+              Execute: {
+                actions: [
+                  {
+                    Repay: {
+                      token_id: b.tokenId,
                     },
-                  ],
-                },
-              }),
-            },
-            gas: Big(10).pow(12).mul(300).toFixed(0),
-            amount: "1"
-          }
-        );
+                  },
+                ],
+              },
+            }),
+          },
+          gas: Big(10).pow(12).mul(300).toFixed(0),
+          attachedDeposit: "1"
+        });
         return main(nearObjects);
       }
     }
@@ -106,16 +105,15 @@ async function main(nearObjects) {
   }
 
   if (repayingActions.length > 0) {
-    await burrowContract.execute(
-      {
-        signerAccount: account,
-        args: {
-          actions: repayingActions,
-        },
-        gas: Big(10).pow(12).mul(300).toFixed(0),
-        amount: "1"
-      }
-    );
+    await txSender.sendFunctionCall({
+      contractId: NearConfig.burrowContractId,
+      methodName: "execute",
+      args: {
+        actions: repayingActions,
+      },
+      gas: Big(10).pow(12).mul(300).toFixed(0),
+      attachedDeposit: "1"
+    });
     return main(nearObjects);
   }
 
@@ -135,16 +133,15 @@ async function main(nearObjects) {
   }
 
   if (withdrawActions.length > 0) {
-    await burrowContract.execute(
-      {
-        signerAccount: account,
-        args: {
-          actions: withdrawActions,
-        },
-        gas: Big(10).pow(12).mul(300).toFixed(0),
-        amount: "1"
-      }
-    );
+    await txSender.sendFunctionCall({
+      contractId: NearConfig.burrowContractId,
+      methodName: "execute",
+      args: {
+        actions: withdrawActions,
+      },
+      gas: Big(10).pow(12).mul(300).toFixed(0),
+      attachedDeposit: "1"
+    });
     return main(nearObjects);
   }
 
@@ -153,14 +150,13 @@ async function main(nearObjects) {
   Object.entries(deposits).forEach(([token_id, amount]) => {
     if (amount > 0) {
       withdrawDepositPromises.push(
-        refFinanceContract.withdraw(
-          {
-            signerAccount: account,
-            args: { token_id, amount },
-            gas: Big(10).pow(12).mul(300).toFixed(0),
-            amount: "1"
-          }
-        ),
+        txSender.sendFunctionCall({
+          contractId: NearConfig.refFinanceContractId,
+          methodName: "withdraw",
+          args: { token_id, amount },
+          gas: Big(10).pow(12).mul(300).toFixed(0),
+          attachedDeposit: "1"
+        }),
       );
     }
   })
@@ -170,7 +166,7 @@ async function main(nearObjects) {
 
   const xrheaBalanceStr = await xrheaContract.ft_balance_of({ account_id: NearConfig.accountId });
   if (xrheaBalanceStr != '0') {
-    await account.functionCall({
+    await txSender.sendFunctionCall({
       "contractId": NearConfig.xrheaContractId,
       "methodName": "unstake",
       "args": {
@@ -225,14 +221,13 @@ async function main(nearObjects) {
       });
       if (Big(storageBalance?.total || 0).eq(0)) {
         rebalanceLogger.debug(`Paying storage for ${b.tokenId}`);
-        await token.storage_deposit(
-          {
-            signerAccount: account,
-            args: { registration_only: true },
-            gas: Big(10).pow(12).mul(300).toFixed(0),
-            amount: Big(10).pow(23).toFixed(0)
-          }
-        );
+        await txSender.sendFunctionCall({
+          contractId: b.tokenId,
+          methodName: "storage_deposit",
+          args: { registration_only: true },
+          gas: Big(10).pow(12).mul(300).toFixed(0),
+          attachedDeposit: Big(10).pow(23).toFixed(0)
+        });
       }
       // Don't attempt buy wNEAR
       if (!(b.tokenId === NearConfig.wrapNearAccountId)) {
@@ -249,7 +244,7 @@ async function main(nearObjects) {
           const expectedRheaAmount = b.tokenBalance.mul(xrheaPrice).div(xrheaPriceDecimals).round(0, 3);
           await refBuy(nearObjects, NearConfig.rheaContractId, expectedRheaAmount);
           const rheaBalanceStr = await rheaContract.ft_balance_of({ account_id: NearConfig.accountId });
-          await account.functionCall({
+          await txSender.sendFunctionCall({
             "contractId": NearConfig.rheaContractId,
             "methodName": "ft_transfer_call",
             "args": {
@@ -269,18 +264,17 @@ async function main(nearObjects) {
       );
       if (balance.gt(0)) {
         rebalanceLogger.debug(`Depositing ${b.tokenId} amount ${balance.toFixed(0)}`);
-        await token.ft_transfer_call(
-          {
-            signerAccount: account,
-            args: {
-              receiver_id: NearConfig.burrowContractId,
-              amount: balance.toFixed(0),
-              msg: "",
-            },
-            gas: Big(10).pow(12).mul(300).toFixed(0),
-            amount: "1"
-          }
-        );
+        await txSender.sendFunctionCall({
+          contractId: b.tokenId,
+          methodName: "ft_transfer_call",
+          args: {
+            receiver_id: NearConfig.burrowContractId,
+            amount: balance.toFixed(0),
+            msg: "",
+          },
+          gas: Big(10).pow(12).mul(300).toFixed(0),
+          attachedDeposit: "1"
+        });
       }
       return main(nearObjects);
     }

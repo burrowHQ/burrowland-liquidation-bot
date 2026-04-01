@@ -16,7 +16,7 @@ module.exports = {
             refFinanceContractId: process.env.REF_EXCHANGE_CONTRACT_ID || "v2.ref-finance.near",
             dclContractId: process.env.DCL_CONTRACT_ID || "dclv2.ref-labs.near",
             priceOracleContractId: process.env.PRICE_ORACLE_CONTRACT_ID || "priceoracle.near",
-            pythOracleContractId: "pyth-oracle.near",
+            pythOracleContractId: process.env.PYTH_ORACLE_CONTRACT_ID || "pyth-oracle.near",
             burrowContractId: process.env.BURROW_CONTRACT_ID || "contract.main.burrow.near",
             rheaContractId: process.env.RHEA_CONTRACT_ID || "token.rhealab.near",
             xrheaContractId: process.env.XRHEA_CONTRACT_ID || "xtoken.rhealab.near",
@@ -38,7 +38,7 @@ module.exports = {
             // refFinanceContractId: "ref-finance-101.testnet",
             dclContractId: process.env.DCL_CONTRACT_ID || "refv2-dev.ref-dev.testnet",
             priceOracleContractId: process.env.PRICE_ORACLE_CONTRACT_ID || "dev-1700791085144-86637101874849",
-            pythOracleContractId: "pyth-oracle.testnet",
+            pythOracleContractId: process.env.PYTH_ORACLE_CONTRACT_ID || "pyth-oracle.testnet",
             burrowContractId: process.env.BURROW_CONTRACT_ID || "dev-1707132736890-13749887598327",
             rheaContractId: process.env.RHEA_CONTRACT_ID || "rhea-dev.testnet",
             xrheaContractId: process.env.XRHEA_CONTRACT_ID || "xrhea-dev.testnet",
@@ -59,7 +59,7 @@ module.exports = {
             refFinanceContractId: process.env.REF_EXCHANGE_CONTRACT_ID || "exchange.ref-dev.testnet",
             dclContractId: process.env.DCL_CONTRACT_ID || "refv2-dev.ref-dev.testnet",
             priceOracleContractId: process.env.PRICE_ORACLE_CONTRACT_ID || "mock-priceoracle.testnet",
-            pythOracleContractId: "pyth-oracle.testnet",
+            pythOracleContractId: process.env.PYTH_ORACLE_CONTRACT_ID || "pyth-oracle.testnet",
             burrowContractId: process.env.BURROW_CONTRACT_ID || "contract.dev-burrow.testnet",
             rheaContractId: process.env.RHEA_CONTRACT_ID || "rhea-dev.testnet",
             xrheaContractId: process.env.XRHEA_CONTRACT_ID || "xrhea-dev.testnet",
@@ -80,7 +80,7 @@ module.exports = {
             refFinanceContractId: process.env.REF_EXCHANGE_CONTRACT_ID || "ref-finance-101.testnet",
             dclContractId: process.env.DCL_CONTRACT_ID || "dclv2.ref-dev.testnet",
             priceOracleContractId: process.env.PRICE_ORACLE_CONTRACT_ID || "priceoracle.services.ref-labs.testnet",
-            pythOracleContractId: "pyth-oracle.testnet",
+            pythOracleContractId: process.env.PYTH_ORACLE_CONTRACT_ID || "pyth-oracle.testnet",
             burrowContractId: process.env.BURROW_CONTRACT_ID || "burrow.services.ref-labs.testnet",
             rheaContractId: process.env.RHEA_CONTRACT_ID || "rhea-dev.testnet",
             xrheaContractId: process.env.XRHEA_CONTRACT_ID || "xrhea-dev.testnet",
@@ -101,6 +101,11 @@ module.exports = {
     config.logLevel = process.env.LOG_LEVEL || 'info';
     config.loopInterval = process.env.LOOP_INTERVAL || 5000;
     config.encodePrivateKey = process.env.ENCODE_PRIVATE_KEY;
+    config.txSigningMode = process.env.NEAR_TX_SIGNING_MODE || 'local';
+    config.remoteSignerUrl = process.env.REMOTE_SIGNER_URL;
+    config.remoteSignerMethod = process.env.REMOTE_SIGNER_METHOD || 'sign_transaction';
+    config.remoteSignerApiKey = process.env.REMOTE_SIGNER_API_KEY;
+    config.remoteSignerTimeoutMs = parseInt(process.env.REMOTE_SIGNER_TIMEOUT_MS || '10000');
 
     // regular & margin
     config.minProfit = Big(process.env.MIN_PROFIT || "1.0");

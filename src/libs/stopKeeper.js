@@ -181,11 +181,11 @@ const processStopPosition = async (a, assets, prices, NearConfig) => {
 /**
  * Execute stop action via oracle
  */
-const executeStop = async (account, NearConfig, actions, burrow_config) => {
+const executeStop = async (txSender, NearConfig, actions, burrow_config) => {
   const msg = JSON.stringify({ MarginExecute: { actions } });
 
   if (burrow_config.enable_price_oracle) {
-    return await account.functionCall({
+    return await txSender.sendFunctionCall({
       contractId: NearConfig.priceOracleContractId,
       methodName: "oracle_call",
       args: {
@@ -196,7 +196,7 @@ const executeStop = async (account, NearConfig, actions, burrow_config) => {
       attachedDeposit: "1",
     });
   } else {
-    return await account.functionCall({
+    return await txSender.sendFunctionCall({
       contractId: NearConfig.burrowContractId,
       methodName: "margin_execute_with_pyth",
       args: { actions },
@@ -211,7 +211,7 @@ const executeStop = async (account, NearConfig, actions, burrow_config) => {
  * rawMarginAccounts is passed from burrow.js to avoid duplicate RPC calls
  */
 module.exports = {
-  main: async (account, burrow_config, NearConfig, burrowContract, assets, prices, rawMarginAccounts) => {
+  main: async (account, burrow_config, NearConfig, txSender, assets, prices, rawMarginAccounts) => {
     stopKeeperLogger.info('Stop Keeper Begin');
 
     // Parse and filter positions with stops
@@ -246,7 +246,7 @@ module.exports = {
         stopKeeperLogger.info(`Executing ${pos.stopType} for ${pos.accountId} position ${pos.position}`);
         stopKeeperLogger.debug("actions:", JSON.stringify(pos.actions, undefined, 2));
 
-        const outcome = await executeStop(account, NearConfig, pos.actions, burrow_config);
+        const outcome = await executeStop(txSender, NearConfig, pos.actions, burrow_config);
         printOutcome("stop_keeper", "./logs/stop_keeper_success.log", outcome);
       } catch (error) {
         stopKeeperLogger.error("Stop execution failed:", error);

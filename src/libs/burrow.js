@@ -1,6 +1,6 @@
 const Big = require("big.js");
 const axios = require("axios");
-const { keysToCamel, printOutcome, sleep } = require("./utils");
+const { keysToCamel, printOutcome } = require("./utils");
 const { parseAsset } = require("./asset");
 const { getPythPrices, getPriceOralcePrices } = require("./priceData");
 const { main: check_margin_position } = require("./margin");
@@ -18,7 +18,7 @@ const liquidateLogger = log4js.getLogger();
 Big.DP = 27;
 
 const promiseWithTimeout = (promise, timeout) => {
-  let timeoutPromise = new Promise((resolve, reject) => {
+  let timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
       reject(new Error('Promise timed out'));
     }, timeout);
@@ -67,13 +67,13 @@ const calcRealPricedProfit = (actions, assets, prices, lp_token_infos) => {
   return 0;
 }
 
-const execute_with_price_oracle = async (account, NearConfig, actions) => {
+const execute_with_price_oracle = async (txSender, NearConfig, actions) => {
   const msg = JSON.stringify({
     Execute: {
       actions
     }
   });
-  return await account.functionCall({
+  return await txSender.sendFunctionCall({
     "contractId": NearConfig.priceOracleContractId,
     "methodName": "oracle_call",
     "args": {
@@ -85,8 +85,8 @@ const execute_with_price_oracle = async (account, NearConfig, actions) => {
   });
 }
 
-const execute_with_pyth_oracle = async (account, NearConfig, actions) => {
-  return await account.functionCall({
+const execute_with_pyth_oracle = async (txSender, NearConfig, actions) => {
+  return await txSender.sendFunctionCall({
     "contractId": NearConfig.burrowContractId,
     "methodName": "execute_with_pyth",
     "args": {
@@ -100,7 +100,7 @@ const execute_with_pyth_oracle = async (account, NearConfig, actions) => {
 module.exports = {
   main: async (nearObjects, { liquidate = false, forceClose = false, marginLiquidate = false, marginForceClose = false, stopKeeper = false } = {}) => {
     liquidateLogger.info('Liquidate Begin');
-    const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, NearConfig } = nearObjects;
+    const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, txSender, NearConfig } = nearObjects;
     const signerString = JSON.stringify(await burrowContract.get_account({
       account_id: NearConfig.accountId,
     }));
@@ -294,8 +294,8 @@ module.exports = {
           liquidateLogger.debug("actions: ", JSON.stringify(bestLiquidation.actions));
           try {
             const outcome = burrow_config.enable_price_oracle ?
-              await execute_with_price_oracle(account, NearConfig, bestLiquidation.actions) :
-              await execute_with_pyth_oracle(account, NearConfig, bestLiquidation.actions);
+              await execute_with_price_oracle(txSender, NearConfig, bestLiquidation.actions) :
+              await execute_with_pyth_oracle(txSender, NearConfig, bestLiquidation.actions);
             printOutcome("normal liquidation", "./logs/liquidation_success.log", outcome);
           } catch (Error) {
             liquidateLogger.error("Error: ", Error)
@@ -320,8 +320,8 @@ module.exports = {
 
             try {
               const outcome = burrow_config.enable_price_oracle ?
-                await execute_with_price_oracle(account, NearConfig, actions) :
-                await execute_with_pyth_oracle(account, NearConfig, actions);
+                await execute_with_price_oracle(txSender, NearConfig, actions) :
+                await execute_with_pyth_oracle(txSender, NearConfig, actions);
               printOutcome("normal force_close", "./logs/force_close_success.log", outcome);
             } catch (Error) {
               liquidateLogger.error("Error: ", Error)
@@ -352,7 +352,7 @@ module.exports = {
 
         // Run margin liquidation/forceclose
         if (marginLiquidate || marginForceClose) {
-          await check_margin_position(account, burrow_config, NearConfig, burrowContract, assets, prices, marginLiquidate, marginForceClose, liquidator, rawMarginAccounts)
+          await check_margin_position(account, burrow_config, NearConfig, txSender, assets, prices, marginLiquidate, marginForceClose, liquidator, rawMarginAccounts)
             .catch(error => {
               console.error("check_margin_position failed:", error);
             });
@@ -360,7 +360,7 @@ module.exports = {
 
         // Run stop keeper
         if (stopKeeper) {
-          await check_stop_positions(account, burrow_config, NearConfig, burrowContract, assets, prices, rawMarginAccounts)
+          await check_stop_positions(account, burrow_config, NearConfig, txSender, assets, prices, rawMarginAccounts)
             .catch(error => {
               console.error("check_stop_positions failed:", error);
             });

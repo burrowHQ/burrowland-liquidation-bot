@@ -4,6 +4,7 @@ const os = require("os");
 const { getConfig } = require("./config");
 const path = require("path");
 const { decryptAES } = require("./utils");
+const { createTxSender } = require("./txSender");
 
 const readlineSync = require('readline-sync');
 function getPassword() {
@@ -21,9 +22,19 @@ module.exports = {
     let near;
     let account;
     let connection;
+    let provider;
 
     if (loadAccount) {
-      if (NearConfig.encodePrivateKey) {
+      if (NearConfig.txSigningMode === 'remote') {
+        connection = nearAPI.Connection.fromConfig({
+          networkId: NearConfig.networkId,
+          provider: { type: "JsonRpcProvider", args: { url: NearConfig.nodeUrl } },
+          signer: { type: "InMemorySigner", keyStore: new nearAPI.keyStores.InMemoryKeyStore() },
+          jsvmAccountId: `jsvm.${NearConfig.networkId}`,
+        });
+        provider = connection.provider;
+        account = new nearAPI.Account(connection, NearConfig.accountId);
+      } else if (NearConfig.encodePrivateKey) {
         const password = getPassword();
         const privateKey = decryptAES(NearConfig.encodePrivateKey, password);
         if (privateKey == '') {
@@ -59,16 +70,24 @@ module.exports = {
         }
       }
     } else {
-      const nearRpc = new nearAPI.providers.JsonRpcProvider(NearConfig.nodeUrl);
+      provider = new nearAPI.providers.JsonRpcProvider(NearConfig.nodeUrl);
       account = new nearAPI.Account(
         {
-          provider: nearRpc,
+          provider,
           networkId: NearConfig.networkId,
           signer: NearConfig.accountId,
         },
         NearConfig.accountId
       );
     }
+
+    provider = provider || connection?.provider;
+    const txSender = createTxSender({
+      account,
+      provider,
+      NearConfig,
+      signerAccountId: NearConfig.accountId,
+    });
 
     const tokenContract = (tokenAccountId) =>
       new nearAPI.Contract(connection, tokenAccountId, {
@@ -182,6 +201,7 @@ module.exports = {
       dclContract,
       rheaContract,
       xrheaContract,
+      txSender,
       NearConfig,
     };
   },

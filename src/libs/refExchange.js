@@ -618,8 +618,8 @@ const findBestInverseReturn = (
 };
 
 async function executeSmartRouterSwap(nearObjects, swapInfo) {
-  const { account, NearConfig } = nearObjects;
-  await account.functionCall({
+  const { txSender, NearConfig } = nearObjects;
+  await txSender.sendFunctionCall({
     "contractId": swapInfo.inTokenAccountId,
     "methodName": "ft_transfer_call",
     "args": {
@@ -633,68 +633,64 @@ async function executeSmartRouterSwap(nearObjects, swapInfo) {
 }
 
 async function executeSwap(nearObjects, swapInfo) {
-  const { account, tokenContract, NearConfig } = nearObjects;
+  const { txSender, NearConfig } = nearObjects;
   let tokenId = swapInfo.inTokenAccountId;
-  let token = tokenContract(tokenId);
   return Big(
-    await token.ft_transfer_call(
-      {
-        signerAccount: account,
-        args: {
-          receiver_id: NearConfig.refFinanceContractId,
-          amount: swapInfo.amountIn.toFixed(0),
-          msg: JSON.stringify({
-            actions: swapInfo.pools.map((pool, idx) => {
-              const tokenIn = tokenId;
-              tokenId = swapInfo.swapPath[idx + 1];
-              return {
-                pool_id: pool.index,
-                token_in: tokenIn,
-                token_out: tokenId,
-                min_amount_out:
-                  tokenId === swapInfo.outTokenAccountId
-                    ? swapInfo.amountOut
-                      .mul(Big(100).sub(NearConfig.maxSlippage).div(100))
-                      .round(0, 0)
-                      .toFixed(0)
-                    : "0",
-              };
-            }),
+    await txSender.sendFunctionCall({
+      contractId: swapInfo.inTokenAccountId,
+      methodName: "ft_transfer_call",
+      args: {
+        receiver_id: NearConfig.refFinanceContractId,
+        amount: swapInfo.amountIn.toFixed(0),
+        msg: JSON.stringify({
+          actions: swapInfo.pools.map((pool, idx) => {
+            const tokenIn = tokenId;
+            tokenId = swapInfo.swapPath[idx + 1];
+            return {
+              pool_id: pool.index,
+              token_in: tokenIn,
+              token_out: tokenId,
+              min_amount_out:
+                tokenId === swapInfo.outTokenAccountId
+                  ? swapInfo.amountOut
+                    .mul(Big(100).sub(NearConfig.maxSlippage).div(100))
+                    .round(0, 0)
+                    .toFixed(0)
+                  : "0",
+            };
           }),
-        },
-        gas: Big(10).pow(12).mul(300).toFixed(0),
-        amount: "1"
-      }
-    )
+        }),
+      },
+      gas: Big(10).pow(12).mul(300).toFixed(0),
+      attachedDeposit: "1"
+    })
   );
 }
 
 async function executeDclSwap(nearObjects, swapInfo) {
-  const { account, tokenContract, NearConfig } = nearObjects;
+  const { txSender, NearConfig } = nearObjects;
   let tokenId = swapInfo.inTokenAccountId;
-  let token = tokenContract(tokenId);
   return Big(
-    await token.ft_transfer_call(
-      {
-        signerAccount: account,
-        args: {
-          receiver_id: NearConfig.dclContractId,
-          amount: swapInfo.amountIn.toFixed(0),
-          msg: JSON.stringify({
-            'Swap': {
-              'pool_ids': [swapInfo.poolId],
-              'output_token': swapInfo.outTokenAccountId,
-              'min_output_amount': swapInfo.amountOut.mul(Big(100).sub(NearConfig.maxSlippage).div(100))
-                .round(0, 0)
-                .toFixed(0),
-              'skip_unwrap_near': true,
-            },
-          }),
-        },
-        gas: Big(10).pow(12).mul(300).toFixed(0),
-        amount: "1"
-      }
-    )
+    await txSender.sendFunctionCall({
+      contractId: swapInfo.inTokenAccountId,
+      methodName: "ft_transfer_call",
+      args: {
+        receiver_id: NearConfig.dclContractId,
+        amount: swapInfo.amountIn.toFixed(0),
+        msg: JSON.stringify({
+          'Swap': {
+            'pool_ids': [swapInfo.poolId],
+            'output_token': swapInfo.outTokenAccountId,
+            'min_output_amount': swapInfo.amountOut.mul(Big(100).sub(NearConfig.maxSlippage).div(100))
+              .round(0, 0)
+              .toFixed(0),
+            'skip_unwrap_near': true,
+          },
+        }),
+      },
+      gas: Big(10).pow(12).mul(300).toFixed(0),
+      attachedDeposit: "1"
+    })
   );
 }
 
@@ -773,6 +769,7 @@ async function refSell(nearObjects, tokenId, amountIn) {
 
 const unwrapAndStake = async (
   account,
+  txSender,
   wrapNearAccountId,
   wrapNearBalance,
   tokenId,
@@ -789,7 +786,7 @@ const unwrapAndStake = async (
     rebalanceLogger.warn("Needs", unwrapAmount.toFixed(0), "wrap to unwrap, but the account balance is only", wrapNearBalance.toFixed(0))
     return;
   }
-  await account.functionCall({
+  await txSender.sendFunctionCall({
     "contractId": wrapNearAccountId,
     "methodName": "near_withdraw",
     "args": {
@@ -798,7 +795,7 @@ const unwrapAndStake = async (
     "gas": Big(10).pow(12).mul(300).toFixed(0),
     "attachedDeposit": "1",
   });
-  await account.functionCall({
+  await txSender.sendFunctionCall({
     "contractId": tokenId,
     "methodName": "deposit_and_stake",
     "args": {},
@@ -808,7 +805,7 @@ const unwrapAndStake = async (
 }
 
 async function refBuy(nearObjects, tokenId, amountOut) {
-  const { account, NearConfig, tokenContract, dclContract } = nearObjects;
+  const { account, txSender, NearConfig, tokenContract, dclContract } = nearObjects;
 
   if (tokenId === NearConfig.wrapNearAccountId) {
     return amountOut;
@@ -820,6 +817,7 @@ async function refBuy(nearObjects, tokenId, amountOut) {
   if (tokenId === NearConfig.rnearContractId) {
     return await unwrapAndStake(
       account,
+      txSender,
       NearConfig.wrapNearAccountId,
       wrapNearBalance,
       NearConfig.rnearContractId,
@@ -831,6 +829,7 @@ async function refBuy(nearObjects, tokenId, amountOut) {
   if (tokenId === NearConfig.linearContractId) {
     return await unwrapAndStake(
       account,
+      txSender,
       NearConfig.wrapNearAccountId,
       wrapNearBalance,
       NearConfig.linearContractId,
@@ -842,6 +841,7 @@ async function refBuy(nearObjects, tokenId, amountOut) {
   if (tokenId === NearConfig.stnearContractId) {
     return await unwrapAndStake(
       account,
+      txSender,
       NearConfig.wrapNearAccountId,
       wrapNearBalance,
       NearConfig.stnearContractId,
