@@ -25,7 +25,7 @@ module.exports = {
             stnearContractId: process.env.STNEAR_CONTRACT_ID || "meta-pool.near",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.near",
-            smartrouterUrl: "https://smartrouter.ref.finance",
+            smartrouterUrl: process.env.SMARTRROUTER_URL || "https://smartrouter-inner.rhea.finance",
           };
         case "development":
           return {
@@ -47,7 +47,7 @@ module.exports = {
             stnearContractId: process.env.STNEAR_CONTRACT_ID || "meta-v2.pool.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
-            smartrouterUrl: "https://smartrouterdev.refburrow.top",
+            smartrouterUrl: process.env.SMARTRROUTER_URL || "https://smartrouterdev.refburrow.top",
           };
         case "testnet_dev":
           return {
@@ -68,7 +68,7 @@ module.exports = {
             stnearContractId: process.env.STNEAR_CONTRACT_ID || "meta-v2.pool.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
-            smartrouterUrl: "https://smartrouterdev.refburrow.top",
+            smartrouterUrl: process.env.SMARTRROUTER_URL || "https://smartrouterdev.refburrow.top",
           };
         case "testnet_public":
           return {
@@ -89,7 +89,7 @@ module.exports = {
             stnearContractId: process.env.STNEAR_CONTRACT_ID || "meta-v2.pool.testnet",
             accountId: process.env.NEAR_ACCOUNT_ID,
             wrapNearAccountId: "wrap.testnet",
-            smartrouterUrl: "https://smartroutertest.refburrow.top",
+            smartrouterUrl: process.env.SMARTRROUTER_URL || "https://smartroutertest.refburrow.top",
           };
         default:
           throw Error(
