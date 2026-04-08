@@ -1,5 +1,6 @@
 //! The code below is based on skyward finance https://github.com/skyward-finance/app-ui.
 
+const fetch = require("node-fetch");
 const Big = require("big.js");
 const { loadJson, saveJson, keysToCamel, sleep } = require("./utils");
 
@@ -30,6 +31,9 @@ const feeTier = ['100', '400', '2000', '10000'];
 
 let tokenCache = null;
 let swapFailedConter = 0;
+let nearIntentsTokenCache = null;
+
+const NEAR_INTENTS_TERMINAL_STATUS = new Set(['SUCCESS', 'REFUNDED', 'FAILED']);
 
 async function fetchUsdTokensDecimals(tokenContract, tokenId) {
   if (tokenId in tokenDecimals) {
@@ -694,6 +698,278 @@ async function executeDclSwap(nearObjects, swapInfo) {
   );
 }
 
+function getNearIntentsHeaders(NearConfig) {
+  return {
+    "Content-Type": "application/json",
+    ...(NearConfig.nearIntents?.jwt ? { Authorization: `Bearer ${NearConfig.nearIntents.jwt}` } : {}),
+  };
+}
+
+async function fetchNearIntentsTokens(NearConfig) {
+  if (nearIntentsTokenCache) {
+    return nearIntentsTokenCache;
+  }
+
+  const response = await fetch(`${NearConfig.nearIntents.apiBaseUrl}/v0/tokens`, {
+    headers: getNearIntentsHeaders(NearConfig),
+    timeout: NearConfig.nearIntents.quoteTimeoutMs,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch NEAR Intents tokens: ${response.status} ${response.statusText}`);
+  }
+
+  nearIntentsTokenCache = await response.json();
+  return nearIntentsTokenCache;
+}
+
+async function resolveNearIntentsAssetId(NearConfig, tokenId) {
+  const tokens = await fetchNearIntentsTokens(NearConfig);
+  const normalizedTokenId = tokenId.toLowerCase();
+
+  const matchedToken = tokens.find((token) => {
+    const contractAddress = token.contractAddress?.toLowerCase();
+    const assetId = token.assetId?.toLowerCase();
+    return contractAddress === normalizedTokenId;
+  });
+
+  if (!matchedToken?.assetId) {
+    throw new Error(`NEAR Intents assetId not found for token ${tokenId}`);
+  }
+
+  return matchedToken.assetId;
+}
+
+async function quoteNearIntentsSwap(nearObjects, inTokenAccountId, outTokenAccountId, amount, swapType) {
+  const { NearConfig } = nearObjects;
+  const originAsset = await resolveNearIntentsAssetId(NearConfig, inTokenAccountId);
+  const destinationAsset = await resolveNearIntentsAssetId(NearConfig, outTokenAccountId);
+  const deadline = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+  console.log(JSON.stringify({
+      dry: false,
+      swapType,
+      slippageTolerance: NearConfig.nearIntents.slippageBps,
+      originAsset,
+      destinationAsset,
+      depositType: 'ORIGIN_CHAIN',
+      amount: amount.toFixed(0),
+      refundTo: NearConfig.accountId,
+      refundType: 'ORIGIN_CHAIN',
+      recipient: NearConfig.accountId,
+      recipientType: 'DESTINATION_CHAIN',
+      deadline,
+    }));
+
+  const response = await fetch(`${NearConfig.nearIntents.apiBaseUrl}/v0/quote`, {
+    method: 'POST',
+    headers: getNearIntentsHeaders(NearConfig),
+    timeout: NearConfig.nearIntents.quoteTimeoutMs,
+    body: JSON.stringify({
+      dry: false,
+      swapType,
+      slippageTolerance: NearConfig.nearIntents.slippageBps,
+      originAsset,
+      destinationAsset,
+      depositType: 'ORIGIN_CHAIN',
+      amount: amount.toFixed(0),
+      refundTo: NearConfig.accountId,
+      refundType: 'ORIGIN_CHAIN',
+      recipient: NearConfig.accountId,
+      recipientType: 'DESTINATION_CHAIN',
+      deadline,
+    }),
+  });
+
+  const quoteResponse = await response.json();
+  if (!response.ok) {
+    throw new Error(`NEAR Intents quote failed: ${response.status} ${JSON.stringify(quoteResponse)}`);
+  }
+
+  if (!quoteResponse?.quote?.depositAddress || !quoteResponse?.quote?.amountIn || !quoteResponse?.quote?.amountOut) {
+    throw new Error(`NEAR Intents quote missing fields: ${JSON.stringify(quoteResponse)}`);
+  }
+
+  return {
+    venue: 'intents',
+    mode: swapType,
+    inTokenAccountId,
+    outTokenAccountId,
+    amountIn: Big(quoteResponse.quote.amountIn),
+    amountOut: Big(quoteResponse.quote.amountOut),
+    rawQuote: quoteResponse,
+  };
+}
+
+function extractTransactionHash(txResult) {
+  return txResult?.transaction?.hash || txResult?.transaction_outcome?.id || txResult?.transaction_outcome?.outcome?.id;
+}
+
+async function submitNearIntentsDeposit(NearConfig, intentsQuote, txHash) {
+  const response = await fetch(`${NearConfig.nearIntents.apiBaseUrl}/v0/deposit/submit`, {
+    method: 'POST',
+    headers: getNearIntentsHeaders(NearConfig),
+    timeout: NearConfig.nearIntents.quoteTimeoutMs,
+    body: JSON.stringify({
+      txHash,
+      depositAddress: intentsQuote.rawQuote.quote.depositAddress,
+      nearSenderAccount: NearConfig.accountId,
+      memo: intentsQuote.rawQuote.quote.depositMemo,
+    }),
+  });
+
+  const submitResponse = await response.json();
+  if (!response.ok) {
+    throw new Error(`NEAR Intents deposit submit failed: ${response.status} ${JSON.stringify(submitResponse)}`);
+  }
+
+  return submitResponse;
+}
+
+async function waitNearIntentsStatus(NearConfig, depositAddress, depositMemo) {
+  const startedAt = Date.now();
+  const query = new URLSearchParams({ depositAddress });
+  if (depositMemo) {
+    query.set('depositMemo', depositMemo);
+  }
+
+  while (Date.now() - startedAt < NearConfig.nearIntents.statusTimeoutMs) {
+    const response = await fetch(`${NearConfig.nearIntents.apiBaseUrl}/v0/status?${query.toString()}`, {
+      headers: getNearIntentsHeaders(NearConfig),
+      timeout: NearConfig.nearIntents.quoteTimeoutMs,
+    });
+    const statusResponse = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`NEAR Intents status failed: ${response.status} ${JSON.stringify(statusResponse)}`);
+    }
+
+    if (NEAR_INTENTS_TERMINAL_STATUS.has(statusResponse.status)) {
+      return statusResponse;
+    }
+
+    await sleep(NearConfig.nearIntents.statusPollIntervalMs);
+  }
+
+  throw new Error(`NEAR Intents status polling timed out for depositAddress ${depositAddress}`);
+}
+
+async function executeNearIntentsSwap(nearObjects, intentsQuote, operationName) {
+  const { txSender, NearConfig, tokenContract } = nearObjects;
+  const { inTokenAccountId, outTokenAccountId, amountIn, amountOut, rawQuote, mode } = intentsQuote;
+  const { depositAddress, depositMemo } = rawQuote.quote;
+
+  rebalanceLogger.info(`${operationName} intents quote`, {
+    venue: 'intents',
+    swapType: mode,
+    tokenId: inTokenAccountId,
+    outTokenId: outTokenAccountId,
+    amountIn: amountIn.toFixed(0),
+    amountOut: amountOut.toFixed(0),
+    minAmountIn: rawQuote.quote.minAmountIn,
+    minAmountOut: rawQuote.quote.minAmountOut,
+    correlationId: rawQuote.correlationId || rawQuote.quote.correlationId,
+    depositAddress,
+    depositMemo,
+  });
+
+  const inTokenContract = tokenContract(inTokenAccountId);
+  const storageBalance = await inTokenContract.storage_balance_of({
+    account_id: depositAddress,
+  });
+  if (Big(storageBalance?.total || 0).eq(0)) {
+    const storageBalanceBounds = await inTokenContract.storage_balance_bounds();
+    const storageDeposit = storageBalanceBounds?.min || Big(10).pow(23).toFixed(0);
+    rebalanceLogger.info(`${operationName} intents storage_deposit`, {
+      venue: 'intents',
+      tokenId: inTokenAccountId,
+      depositAddress,
+      storageDeposit,
+    });
+    await txSender.sendFunctionCall({
+      contractId: inTokenAccountId,
+      methodName: 'storage_deposit',
+      args: {
+        account_id: depositAddress,
+        registration_only: true,
+      },
+      gas: Big(10).pow(12).mul(100).toFixed(0),
+      attachedDeposit: storageDeposit,
+    });
+  }
+
+  const transferResult = await txSender.sendFunctionCall({
+    contractId: inTokenAccountId,
+    methodName: 'ft_transfer',
+    args: {
+      receiver_id: depositAddress,
+      amount: amountIn.toFixed(0),
+      memo: depositMemo,
+    },
+    gas: Big(10).pow(12).mul(100).toFixed(0),
+    attachedDeposit: '1',
+  });
+
+  const txHash = extractTransactionHash(transferResult);
+  if (!txHash) {
+    throw new Error('NEAR Intents transfer completed but transaction hash was not found');
+  }
+
+  const submitResponse = await submitNearIntentsDeposit(NearConfig, intentsQuote, txHash);
+  rebalanceLogger.info(`${operationName} intents deposit submitted`, {
+    venue: 'intents',
+    tokenId: inTokenAccountId,
+    outTokenId: outTokenAccountId,
+    amountIn: amountIn.toFixed(0),
+    amountOut: amountOut.toFixed(0),
+    depositAddress,
+    depositMemo,
+    txHash,
+    status: submitResponse.status,
+    correlationId: submitResponse.correlationId,
+  });
+
+  const statusResponse = await waitNearIntentsStatus(NearConfig, depositAddress, depositMemo);
+  const actualAmountIn = statusResponse.swapDetails?.amountIn || statusResponse.quoteResponse?.quote?.amountIn || amountIn.toFixed(0);
+  const actualAmountOut = statusResponse.swapDetails?.amountOut || statusResponse.quoteResponse?.quote?.amountOut || amountOut.toFixed(0);
+  const wrappedAmountOut = statusResponse.swapDetails?.amountOut;
+  const refundAmount = statusResponse.swapDetails?.refundAmount || statusResponse.quoteResponse?.quote?.refundFee;
+  rebalanceLogger.info(`${operationName} intents terminal status`, {
+    venue: 'intents',
+    tokenId: inTokenAccountId,
+    outTokenId: outTokenAccountId,
+    amountIn: actualAmountIn,
+    amountOut: actualAmountOut,
+    refundAmount,
+    depositAddress,
+    depositMemo,
+    txHash,
+    status: statusResponse.status,
+    correlationId: statusResponse.correlationId,
+  });
+
+  if (statusResponse.status !== 'SUCCESS') {
+    throw new Error(`NEAR Intents swap did not succeed: ${statusResponse.status}`);
+  }
+
+  if (outTokenAccountId === NearConfig.wrapNearAccountId && wrappedAmountOut && Big(wrappedAmountOut).gt(0)) {
+    rebalanceLogger.info(`${operationName} intents wrap near`, {
+      venue: 'intents',
+      outTokenId: outTokenAccountId,
+      amountOut: wrappedAmountOut,
+    });
+    await txSender.sendFunctionCall({
+      contractId: NearConfig.wrapNearAccountId,
+      methodName: 'near_deposit',
+      args: {},
+      gas: Big(10).pow(12).mul(100).toFixed(0),
+      attachedDeposit: wrappedAmountOut,
+    });
+  }
+
+  return statusResponse;
+}
+
 async function refSell(nearObjects, tokenId, amountIn) {
   const { NearConfig, dclContract } = nearObjects;
 
@@ -715,20 +991,45 @@ async function refSell(nearObjects, tokenId, amountIn) {
     amountIn
   );
 
+  let intentsSwapInfo = undefined;
+  try {
+    intentsSwapInfo = await quoteNearIntentsSwap(
+      nearObjects,
+      tokenId,
+      NearConfig.wrapNearAccountId,
+      amountIn,
+      'EXACT_INPUT'
+    );
+  } catch (error) {
+    rebalanceLogger.warn('refSell intents quote failed:', error);
+  }
+
   let swapExchange = undefined;
-  if (swapInfo && dclSwapInfo.poolId) {
-    if (swapInfo.amountOut.gt(dclSwapInfo.amountOut)) {
-      swapExchange = 'exchange'
-    } else {
-      swapExchange = 'dcl'
-    }
-  } else if (!swapInfo && dclSwapInfo.poolId) {
-    swapExchange = 'dcl'
-  } else if (swapInfo && !dclSwapInfo.poolId) {
-    swapExchange = 'exchange'
+  if (swapInfo?.amountOut && (!dclSwapInfo?.poolId || swapInfo.amountOut.gte(dclSwapInfo.amountOut)) && (!intentsSwapInfo || swapInfo.amountOut.gte(intentsSwapInfo.amountOut))) {
+    swapExchange = 'exchange';
+  } else if (dclSwapInfo?.poolId && (!intentsSwapInfo || dclSwapInfo.amountOut.gte(intentsSwapInfo.amountOut))) {
+    swapExchange = 'dcl';
+  } else if (intentsSwapInfo) {
+    swapExchange = 'intents';
   }
 
   switch (swapExchange) {
+    case 'intents':
+      await executeNearIntentsSwap(nearObjects, intentsSwapInfo, 'refSell')
+        .then(() => {
+          swapFailedConter = 0;
+          rebalanceLogger.debug('refSell executeNearIntentsSwap succeeded');
+        })
+        .catch(error => {
+          if (swapFailedConter < NearConfig.swapFailedLimit) {
+            swapFailedConter += 1;
+            rebalanceLogger.error(`refSell executeNearIntentsSwap failed(${swapFailedConter} times):`, error)
+          } else {
+            rebalanceLogger.error(`refSell executeNearIntentsSwap failed(${swapFailedConter} times):`, error)
+            process.exit(1)
+          }
+        });
+      break;
     case "exchange":
       await executeSmartRouterSwap(nearObjects, swapInfo)
         .then(() => {
@@ -867,22 +1168,30 @@ async function refBuy(nearObjects, tokenId, amountOut) {
     amountOut
   );
 
+  let intentsSwapInfo = undefined;
+  try {
+    intentsSwapInfo = await quoteNearIntentsSwap(
+      nearObjects,
+      NearConfig.wrapNearAccountId,
+      tokenId,
+      amountOut,
+      'EXACT_OUTPUT'
+    );
+  } catch (error) {
+    rebalanceLogger.warn('refBuy intents quote failed:', error);
+  }
+
   let swapExchange = undefined;
   let needAmount = undefined;
-  if (swapInfo.pools && dclSwapInfo.poolId) {
-    if (swapInfo.amountIn.lt(dclSwapInfo.amountIn)) {
-      swapExchange = 'exchange'
-      needAmount = swapInfo.amountIn
-    } else {
-      swapExchange = 'dcl'
-      needAmount = dclSwapInfo.amountIn
-    }
-  } else if (!swapInfo.pools && dclSwapInfo.poolId) {
-    swapExchange = 'dcl'
-    needAmount = dclSwapInfo.amountIn
-  } else if (swapInfo.pools && !dclSwapInfo.poolId) {
-    swapExchange = 'exchange'
-    needAmount = swapInfo.amountIn
+  if (swapInfo?.pools && (!dclSwapInfo?.poolId || swapInfo.amountIn.lte(dclSwapInfo.amountIn)) && (!intentsSwapInfo || swapInfo.amountIn.lte(intentsSwapInfo.amountIn))) {
+    swapExchange = 'exchange';
+    needAmount = swapInfo.amountIn;
+  } else if (dclSwapInfo?.poolId && (!intentsSwapInfo || dclSwapInfo.amountIn.lte(intentsSwapInfo.amountIn))) {
+    swapExchange = 'dcl';
+    needAmount = dclSwapInfo.amountIn;
+  } else if (intentsSwapInfo) {
+    swapExchange = 'intents';
+    needAmount = intentsSwapInfo.amountIn;
   }
 
   if (needAmount && wrapNearBalance.lt(needAmount)) {
@@ -891,6 +1200,22 @@ async function refBuy(nearObjects, tokenId, amountOut) {
   }
 
   switch (swapExchange) {
+    case 'intents':
+      await executeNearIntentsSwap(nearObjects, intentsSwapInfo, 'refBuy')
+        .then(() => {
+          swapFailedConter = 0;
+          rebalanceLogger.debug('refBuy executeNearIntentsSwap succeeded');
+        })
+        .catch(error => {
+          if (swapFailedConter < NearConfig.swapFailedLimit) {
+            swapFailedConter += 1;
+            rebalanceLogger.error(`refBuy executeNearIntentsSwap failed(${swapFailedConter} times):`, error)
+          } else {
+            rebalanceLogger.error(`refBuy executeNearIntentsSwap failed(${swapFailedConter} times):`, error)
+            process.exit(1)
+          }
+        });
+      break;
     case "exchange":
       await executeSwap(nearObjects, swapInfo)
         .then(() => {
@@ -932,4 +1257,6 @@ async function refBuy(nearObjects, tokenId, amountOut) {
 module.exports = {
   refSell,
   refBuy,
+  quoteNearIntentsSwap,
+  executeNearIntentsSwap,
 };

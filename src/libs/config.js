@@ -147,6 +147,15 @@ module.exports = {
     config.maxSlippage = Big(process.env.MAX_SLIPPAGE || "0.5");
     config.swapFailedLimit = process.env.SWAP_FAILED_LIMIT || 5;
 
+    config.nearIntents = {
+      apiBaseUrl: (process.env.NEAR_INTENTS_API_BASE_URL || 'https://1click.chaindefuser.com').replace(/\/$/, ''),
+      jwt: process.env.NEAR_INTENTS_JWT,
+      slippageBps: parseInt(process.env.NEAR_INTENTS_SLIPPAGE_BPS || '50'),
+      quoteTimeoutMs: parseInt(process.env.NEAR_INTENTS_QUOTE_TIMEOUT_MS || '10000'),
+      statusTimeoutMs: parseInt(process.env.NEAR_INTENTS_STATUS_TIMEOUT_MS || '120000'),
+      statusPollIntervalMs: parseInt(process.env.NEAR_INTENTS_STATUS_POLL_INTERVAL_MS || '2000'),
+    };
+
     return config;
   },
 };
