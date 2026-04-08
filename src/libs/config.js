@@ -106,6 +106,7 @@ module.exports = {
     config.remoteSignerMethod = process.env.REMOTE_SIGNER_METHOD || 'sign_transaction';
     config.remoteSignerApiKey = process.env.REMOTE_SIGNER_API_KEY;
     config.remoteSignerTimeoutMs = parseInt(process.env.REMOTE_SIGNER_TIMEOUT_MS || '10000');
+    config.heartbeatUrl = process.env.HEARTBEAT_URL;
 
     // regular & margin
     config.minProfit = Big(process.env.MIN_PROFIT || "1.0");

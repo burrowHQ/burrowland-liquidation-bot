@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require('path');
 const CryptoJS = require("crypto-js");
 const log4js = require('log4js');
+const fetch = require("node-fetch");
 const liquidateLogger = log4js.getLogger();
 
 const PYTH_STALENESS_THRESHOLD = 60;
@@ -129,6 +130,22 @@ const getSwapActionsMinAmountOut = (actions, targetTokenId) => {
   return amountOut;
 }
 
+const sendHeartBeat = async (url, programName) => {
+  if (!url) {
+    return;
+  }
+
+  await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      program_name: programName,
+    }),
+  });
+}
+
 module.exports = {
   bigMin,
   keysToCamel,
@@ -143,4 +160,5 @@ module.exports = {
   printOutcome,
   getRefExchangeSwapMsg,
   getSwapActionsMinAmountOut,
+  sendHeartBeat,
 };

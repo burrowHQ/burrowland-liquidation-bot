@@ -1,5 +1,6 @@
 const { initNear } = require("./libs/near");
 const { main: rebalance } = require("./libs/rebalance");
+const { sendHeartBeat } = require("./libs/utils");
 const log4js = require('log4js');
 
 initNear(true).then((nearObject) => {
@@ -22,14 +23,20 @@ initNear(true).then((nearObject) => {
     }
   });
   const rebalanceLogger = log4js.getLogger();
-  const executeAsyncOperation = () => {
-    rebalance(nearObject).then(() => {
+  const executeAsyncOperation = async () => {
+    try {
+      await rebalance(nearObject);
+      try {
+        await sendHeartBeat(nearObject.NearConfig.heartbeatUrl, `${nearObject.NearConfig.accountId}-rebalance`);
+      } catch (error) {
+        rebalanceLogger.error('Heartbeat Failed:', error);
+      }
       rebalanceLogger.info('Rebalance End');
-      setTimeout(executeAsyncOperation, nearObject.NearConfig.loopInterval);
-    }).catch(error => {
+    } catch (error) {
       rebalanceLogger.error('Rebalance Failed:', error);
+    } finally {
       setTimeout(executeAsyncOperation, nearObject.NearConfig.loopInterval);
-    })
+    }
   }
   executeAsyncOperation();
 })

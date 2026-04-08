@@ -2,6 +2,7 @@
 
 const { initNear } = require("./libs/near");
 const { main: liquidate } = require("./libs/burrow");
+const { sendHeartBeat } = require("./libs/utils");
 const log4js = require('log4js');
 
 initNear(true).then((nearObject) => {
@@ -24,20 +25,26 @@ initNear(true).then((nearObject) => {
     }
   });
   const liquidateLogger = log4js.getLogger();
-  const executeAsyncOperation = () => {
-    liquidate(nearObject, {
-      liquidate: nearObject.NearConfig.liquidate,
-      forceClose: nearObject.NearConfig.forceClose,
-      marginLiquidate: nearObject.NearConfig.marginLiquidate,
-      marginForceClose: nearObject.NearConfig.marginForceClose,
-      stopKeeper: nearObject.NearConfig.stopKeeper,
-    }).then(() => {
+  const executeAsyncOperation = async () => {
+    try {
+      await liquidate(nearObject, {
+        liquidate: nearObject.NearConfig.liquidate,
+        forceClose: nearObject.NearConfig.forceClose,
+        marginLiquidate: nearObject.NearConfig.marginLiquidate,
+        marginForceClose: nearObject.NearConfig.marginForceClose,
+        stopKeeper: nearObject.NearConfig.stopKeeper,
+      });
+      try {
+        await sendHeartBeat(nearObject.NearConfig.heartbeatUrl, `${nearObject.NearConfig.accountId}-liquidate`);
+      } catch (error) {
+        liquidateLogger.error('Heartbeat Failed:', error);
+      }
       liquidateLogger.info('Liquidate End');
-      setTimeout(executeAsyncOperation, nearObject.NearConfig.loopInterval);
-    }).catch(error => {
+    } catch (error) {
       liquidateLogger.error('Liquidate Failed:', error);
+    } finally {
       setTimeout(executeAsyncOperation, nearObject.NearConfig.loopInterval);
-    })
+    }
   }
   executeAsyncOperation();
 })
