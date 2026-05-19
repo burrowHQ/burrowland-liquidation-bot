@@ -1,6 +1,6 @@
 const Big = require("big.js");
 const axios = require("axios");
-const { keysToCamel, printOutcome } = require("./utils");
+const { keysToCamel, printOutcome, sendSlackAlarm } = require("./utils");
 const { parseAsset } = require("./asset");
 const { getPythPrices, getPriceOralcePrices } = require("./priceData");
 const { main: check_margin_position } = require("./margin");
@@ -95,6 +95,10 @@ const execute_with_pyth_oracle = async (txSender, NearConfig, actions) => {
     "gas": Big(10).pow(12).mul(300).toFixed(0),
     "attachedDeposit": "1",
   });
+}
+
+const formatErrorForAlarm = (error) => {
+  return error && (error.stack || error.message) ? error.stack || error.message : JSON.stringify(error);
 }
 
 module.exports = {
@@ -297,8 +301,13 @@ module.exports = {
               await execute_with_price_oracle(txSender, NearConfig, bestLiquidation.actions) :
               await execute_with_pyth_oracle(txSender, NearConfig, bestLiquidation.actions);
             printOutcome("normal liquidation", "./logs/liquidation_success.log", outcome);
-          } catch (Error) {
-            liquidateLogger.error("Error: ", Error)
+          } catch (error) {
+            liquidateLogger.error("Error: ", error)
+            await sendSlackAlarm(
+              NearConfig,
+              "Burrow Liquidation Failed",
+              `*account:* ${NearConfig.accountId}\n*contract:* ${NearConfig.burrowContractId}\n*actions:* \`${JSON.stringify(bestLiquidation.actions)}\`\n*error:* \`\`\`${formatErrorForAlarm(error)}\`\`\``
+            );
           }
         }
       }
@@ -323,8 +332,13 @@ module.exports = {
                 await execute_with_price_oracle(txSender, NearConfig, actions) :
                 await execute_with_pyth_oracle(txSender, NearConfig, actions);
               printOutcome("normal force_close", "./logs/force_close_success.log", outcome);
-            } catch (Error) {
-              liquidateLogger.error("Error: ", Error)
+            } catch (error) {
+              liquidateLogger.error("Error: ", error)
+              await sendSlackAlarm(
+                NearConfig,
+                "Burrow Force Close Failed",
+                `*account:* ${NearConfig.accountId}\n*target:* ${accountDetail.accountId}\n*contract:* ${NearConfig.burrowContractId}\n*actions:* \`${JSON.stringify(actions)}\`\n*error:* \`\`\`${formatErrorForAlarm(error)}\`\`\``
+              );
             }
             break;
           }

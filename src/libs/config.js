@@ -107,6 +107,11 @@ module.exports = {
     config.remoteSignerApiKey = process.env.REMOTE_SIGNER_API_KEY;
     config.remoteSignerTimeoutMs = parseInt(process.env.REMOTE_SIGNER_TIMEOUT_MS || '10000');
     config.heartbeatUrl = process.env.HEARTBEAT_URL;
+    config.slackHookUrl = process.env.SLACK_HOOK_URL;
+    config.slackHookMentions = (process.env.SLACK_HOOK_MENTIONS || "")
+      .split(",")
+      .map((mention) => mention.trim())
+      .filter((mention) => mention.length > 0);
 
     // regular & margin
     config.minProfit = Big(process.env.MIN_PROFIT || "1.0");

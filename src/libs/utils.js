@@ -146,6 +146,57 @@ const sendHeartBeat = async (url, programName) => {
   });
 }
 
+const normalizeSlackMention = (mention) => {
+  if (mention.startsWith("<@") && mention.endsWith(">")) {
+    return mention;
+  }
+  return `<@${mention}>`;
+}
+
+const sendSlackAlarm = async (NearConfig, alarmHeader, alarmMessage) => {
+  if (!NearConfig.slackHookUrl) {
+    return;
+  }
+
+  const mentions = (NearConfig.slackHookMentions || [])
+    .map(normalizeSlackMention)
+    .join("");
+  const msg = `${mentions}${alarmMessage}`;
+
+  try {
+    const response = await fetch(NearConfig.slackHookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        blocks: [
+          {
+            type: "header",
+            text: {
+              type: "plain_text",
+              text: alarmHeader,
+            },
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: msg,
+            },
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Slack alarm failed with status ${response.status}`);
+    }
+  } catch (error) {
+    liquidateLogger.error("Slack alarm error: ", error);
+  }
+}
+
 module.exports = {
   bigMin,
   keysToCamel,
@@ -161,4 +212,5 @@ module.exports = {
   getRefExchangeSwapMsg,
   getSwapActionsMinAmountOut,
   sendHeartBeat,
+  sendSlackAlarm,
 };
