@@ -35,6 +35,9 @@ export LOOP_INTERVAL=60000
 # default to 1.0, filter out debts or margin positions that bring profit less than it.
 export MIN_PROFIT=1.0
 
+# default to 10, regular debt borrowed value below this skips MIN_PROFIT checks.
+export MIN_PROFIT_EXEMPT_BORROWED_VALUE=10
+
 
 ######## REGULAR DEBTS SECTION ########
 # default to false, switch of forcing close for regular debts 

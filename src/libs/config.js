@@ -117,6 +117,7 @@ module.exports = {
     config.minProfit = Big(process.env.MIN_PROFIT || "1.0");
 
     // regular
+    config.minProfitExemptBorrowedValue = Big(process.env.MIN_PROFIT_EXEMPT_BORROWED_VALUE || "10");
     config.minAdjustGap = Big(process.env.MIN_ADJUSTGAP || "0");
     config.minDiscount = Big(process.env.MIN_DISCOUNT || "0.025");
     config.maxLiquidationAmount = Big(

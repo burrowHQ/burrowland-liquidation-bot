@@ -276,14 +276,16 @@ module.exports = {
           }
           const { actions, totalPricedProfit, origDiscount, origHealth, health } =
             liquidation;
+          const exemptFromMinProfit = accountsWithDebt[i].borrowedSum.lt(NearConfig.minProfitExemptBorrowedValue);
           if (
-            totalPricedProfit.lte(NearConfig.minProfit) ||
-            origDiscount.lte(NearConfig.minDiscount) ||
+            (!exemptFromMinProfit && totalPricedProfit.lte(NearConfig.minProfit)) ||
+            (!exemptFromMinProfit && origDiscount.lte(NearConfig.minDiscount)) ||
             origHealth.gte(health)
           ) {
             continue;
           }
-          if (calcRealPricedProfit(actions, assets, prices, lp_token_infos).lte(NearConfig.minProfit)) {
+          const realPricedProfit = calcRealPricedProfit(actions, assets, prices, lp_token_infos);
+          if (!exemptFromMinProfit && realPricedProfit.lte(NearConfig.minProfit)) {
             continue;
           }
           if (
