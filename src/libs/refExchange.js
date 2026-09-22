@@ -402,7 +402,12 @@ const findBestReturnBySmartRouter = async (
   amountIn,
   slippage = 0.005, pathDeep = 3, routerCount = 2
 ) => {
-  const url = `${smartrouterUrl}/swapPath?amountIn=${amountIn.toFixed(0)}&tokenIn=${inTokenAccountId}&tokenOut=${outTokenAccountId}&pathDeep=${pathDeep}&slippage=${slippage}&routerCount=${routerCount}`;
+  let url = `${smartrouterUrl}/swapPath?amountIn=${amountIn.toFixed(0)}&tokenIn=${inTokenAccountId}&tokenOut=${outTokenAccountId}&pathDeep=${pathDeep}&slippage=${slippage}&routerCount=${routerCount}`;
+  if (inTokenAccountId === 'zec.omft.near') {
+    url += '&fixedPools=6065,6063';
+  } else if (outTokenAccountId === 'zec.omft.near') {
+    url += '&fixedPools=6063,6065';
+  }
   const response = await fetch(url);
   const responseJson = await response.json();
   if (responseJson.result_data && responseJson.result_data.args.amount == amountIn.toFixed(0)) {
