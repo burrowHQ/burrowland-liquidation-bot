@@ -10,6 +10,40 @@ const rebalanceLogger = log4js.getLogger();
 
 Big.DP = 27;
 
+async function unstakeXrhea({ xrheaContract, txSender, NearConfig }) {
+  const claimUnlockedRequests = async () => {
+    const requests = await xrheaContract.get_account_unstake_requests({ account_id: NearConfig.accountId });
+    const nowSec = Math.floor(Date.now() / 1000);
+    for (const request of requests) {
+      if (request.status !== "Pending" || (request.lock_days !== 0 && Number(request.unlock_at_sec) > nowSec)) {
+        continue;
+      }
+      await txSender.sendFunctionCall({
+        contractId: NearConfig.xrheaContractId,
+        methodName: "claim_unstake",
+        args: { request_id: request.id },
+        gas: Big(10).pow(12).mul(300).toFixed(0),
+        attachedDeposit: "1",
+      });
+    }
+  };
+
+  await claimUnlockedRequests();
+  const balance = await xrheaContract.ft_balance_of({ account_id: NearConfig.accountId });
+  if (balance === "0") {
+    return;
+  }
+
+  await txSender.sendFunctionCall({
+    contractId: NearConfig.xrheaContractId,
+    methodName: "request_unstake",
+    args: { amount: balance, lock_days: 0 },
+    gas: Big(10).pow(12).mul(300).toFixed(0),
+    attachedDeposit: Big(10).pow(22).toFixed(0),
+  });
+  await claimUnlockedRequests();
+}
+
 async function main(nearObjects) {
   rebalanceLogger.info('Rebalance Begin');
   const { account, tokenContract, refFinanceContract, burrowContract, priceOracleContract, pythOracleContract, rheaContract, xrheaContract, txSender, NearConfig } =
@@ -164,18 +198,7 @@ async function main(nearObjects) {
     await Promise.all(withdrawDepositPromises);
   }
 
-  const xrheaBalanceStr = await xrheaContract.ft_balance_of({ account_id: NearConfig.accountId });
-  if (xrheaBalanceStr != '0') {
-    await txSender.sendFunctionCall({
-      "contractId": NearConfig.xrheaContractId,
-      "methodName": "unstake",
-      "args": {
-        amount: xrheaBalanceStr
-      },
-      "gas": Big(10).pow(12).mul(300).toFixed(0),
-      "attachedDeposit": "1",
-    });
-  }
+  await unstakeXrhea(nearObjects);
 
   // Attempting to sell non-sold tokens
   let tokenIds = Object.keys(assets);
@@ -282,5 +305,6 @@ async function main(nearObjects) {
 }
 
 module.exports = {
-  main
+  main,
+  unstakeXrhea,
 }
