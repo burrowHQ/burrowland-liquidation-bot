@@ -186,7 +186,7 @@ module.exports = {
       NearConfig.xrheaContractId,
       {
         changeMethods: ["request_unstake", "claim_unstake"],
-        viewMethods: ["get_virtual_price", "ft_balance_of", "get_account_unstake_requests"],
+        viewMethods: ["get_virtual_price", "ft_balance_of", "get_account_unstake_requests", "get_exit_fee_bps"],
       }
     );
 

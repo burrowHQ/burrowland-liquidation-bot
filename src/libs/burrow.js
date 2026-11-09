@@ -27,45 +27,73 @@ const promiseWithTimeout = (promise, timeout) => {
   return Promise.race([promise, timeoutPromise]);
 }
 
-const calcRealPricedProfit = (actions, assets, prices, lp_token_infos) => {
+const calcRealPricedProfit = (actions, assets, prices, lp_token_infos, xrheaContractId) => {
   for (const action of actions) {
     if (action.hasOwnProperty("Liquidate")) {
+      let xrheaInPrice = Big(0);
       const inPrice = action["Liquidate"]["in_assets"].reduce((sum, a) => {
         const asset = assets[a.token_id];
         const price = prices.prices[a.token_id];
-        return sum.add(Big(a.amount).mul(price.multiplier)
-          .div(Big(10).pow(price.decimals + asset.config.extraDecimals)));
+        const value = Big(a.amount).mul(price.multiplier)
+          .div(Big(10).pow(price.decimals + asset.config.extraDecimals));
+        if (a.token_id === xrheaContractId) {
+          xrheaInPrice = xrheaInPrice.add(value);
+        }
+        return sum.add(value);
       }, Big(0));
+      let xrheaOutPrice = Big(0);
+      let outPrice;
       if (action['Liquidate']['position'] == "REGULAR") {
-        const outPrice = action["Liquidate"]["out_assets"].reduce((sum, a) => {
+        outPrice = action["Liquidate"]["out_assets"].reduce((sum, a) => {
           const asset = assets[a.token_id];
           const price = prices.prices[a.token_id];
-          return sum.add(Big(a.amount).mul(price.multiplier)
-            .div(Big(10).pow(price.decimals + asset.config.extraDecimals)));
+          const value = Big(a.amount).mul(price.multiplier)
+            .div(Big(10).pow(price.decimals + asset.config.extraDecimals));
+          if (a.token_id === xrheaContractId) {
+            xrheaOutPrice = xrheaOutPrice.add(value);
+          }
+          return sum.add(value);
         }, Big(0));
-        return outPrice.sub(inPrice)
       } else {
         const a = action["Liquidate"]["out_assets"][0];
         const asset = assets[a.token_id];
         const unit_share_tokens = lp_token_infos[a.token_id];
         const unit_share = Big(10).pow(unit_share_tokens.decimals);
-        let min_token_amounts = []
-        const outPrice = Object.values(unit_share_tokens.tokens).reduce((sum, unit_share_token_value) => {
+        const min_token_amounts = []
+        outPrice = Object.values(unit_share_tokens.tokens).reduce((sum, unit_share_token_value) => {
           const token_asset = assets[unit_share_token_value.token_id];
           const token_stdd_amount = new Big(unit_share_token_value.real_amount).mul(Big(10).pow(token_asset.config.extraDecimals));
           const token_balance = Big(token_stdd_amount).mul(Big(a.amount)).div(Big(10).pow(asset.config.extraDecimals)).div(Big(unit_share));
           const price = prices.prices[unit_share_token_value.token_id];
           min_token_amounts.push(token_balance.div(Big(10).pow(token_asset.config.extraDecimals)).mul(Big("0.95")).toFixed(0));
-          return sum.add(token_balance.mul(price.multiplier)
-            .div(Big(10).pow(price.decimals + token_asset.config.extraDecimals)));
+          const value = token_balance.mul(price.multiplier)
+            .div(Big(10).pow(price.decimals + token_asset.config.extraDecimals));
+          if (unit_share_token_value.token_id === xrheaContractId) {
+            xrheaOutPrice = xrheaOutPrice.add(value);
+          }
+          return sum.add(value);
         }, Big(0));
         action["Liquidate"]["min_token_amounts"] = min_token_amounts
-        return outPrice.sub(inPrice)
       }
+      // Rebalance uses received xRHEA to repay xRHEA debt before exiting any remainder.
+      const netXrheaValue = xrheaOutPrice.sub(xrheaInPrice);
+      return { grossProfit: outPrice.sub(inPrice), xrheaExitValue: netXrheaValue.gt(0) ? netXrheaValue : Big(0) };
     }
   }
-  return 0;
+  return { grossProfit: Big(0), xrheaExitValue: Big(0) };
 }
+
+const assessLiquidationProfit = ({ totalPricedProfit, grossProfit, xrheaExitValue, exitFeeBps, minProfit, exemptFromMinProfit }) => {
+  const exitFee = xrheaExitValue.mul(exitFeeBps).div(10000);
+  const estimatedNetProfit = totalPricedProfit.sub(exitFee);
+  const realPricedProfit = grossProfit.sub(exitFee);
+  const requiresMinProfit = !exemptFromMinProfit || exitFee.gt(0);
+  return {
+    estimatedNetProfit,
+    realPricedProfit,
+    profitable: !requiresMinProfit || (estimatedNetProfit.gt(minProfit) && realPricedProfit.gt(minProfit)),
+  };
+};
 
 const execute_with_price_oracle = async (txSender, NearConfig, actions) => {
   const msg = JSON.stringify({
@@ -102,9 +130,11 @@ const formatErrorForAlarm = (error) => {
 }
 
 module.exports = {
+  calcRealPricedProfit,
+  assessLiquidationProfit,
   main: async (nearObjects, { liquidate = false, forceClose = false, marginLiquidate = false, marginForceClose = false, stopKeeper = false } = {}) => {
     liquidateLogger.info('Liquidate Begin');
-    const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, txSender, NearConfig } = nearObjects;
+    const { account, burrowContract, refFinanceContract, priceOracleContract, pythOracleContract, xrheaContract, txSender, NearConfig } = nearObjects;
     const signerString = JSON.stringify(await burrowContract.get_account({
       account_id: NearConfig.accountId,
     }));
@@ -232,6 +262,7 @@ module.exports = {
       );
 
       let bestLiquidation = null;
+      let xrheaExitFeeBps;
       if (liquidate) {
         const signerAccount = processAccount(
           parseAccountDetailed(
@@ -277,21 +308,43 @@ module.exports = {
           const { actions, totalPricedProfit, origDiscount, origHealth, health } =
             liquidation;
           const exemptFromMinProfit = accountsWithDebt[i].borrowedSum.lt(NearConfig.minProfitExemptBorrowedValue);
-          if (
-            (!exemptFromMinProfit && totalPricedProfit.lte(NearConfig.minProfit)) ||
-            (!exemptFromMinProfit && origDiscount.lte(NearConfig.minDiscount)) ||
-            origHealth.gte(health)
-          ) {
+          if ((!exemptFromMinProfit && origDiscount.lte(NearConfig.minDiscount)) || origHealth.gte(health)) {
             continue;
           }
-          const realPricedProfit = calcRealPricedProfit(actions, assets, prices, lp_token_infos);
-          if (!exemptFromMinProfit && realPricedProfit.lte(NearConfig.minProfit)) {
+          const { grossProfit, xrheaExitValue } = calcRealPricedProfit(actions, assets, prices, lp_token_infos, NearConfig.xrheaContractId);
+          if (xrheaExitValue.gt(0) && xrheaExitFeeBps === undefined) {
+            try {
+              const feeTiers = await xrheaContract.get_exit_fee_bps();
+              const feeBps = Number(feeTiers?.[0]);
+              if (feeTiers?.[0] == null || !Number.isInteger(feeBps) || feeBps < 0 || feeBps > 10000) {
+                throw new Error("xRHEA zero-day exit fee is unavailable");
+              }
+              xrheaExitFeeBps = feeBps;
+            } catch (error) {
+              liquidateLogger.warn("Skipping liquidation with xRHEA exit: cannot read exit fee", error);
+              xrheaExitFeeBps = null;
+            }
+          }
+          if (xrheaExitValue.gt(0) && xrheaExitFeeBps === null) {
+            continue;
+          }
+          const exitFeeBps = xrheaExitFeeBps ?? 0;
+          const { estimatedNetProfit, profitable } = assessLiquidationProfit({
+            totalPricedProfit,
+            grossProfit,
+            xrheaExitValue,
+            exitFeeBps,
+            minProfit: NearConfig.minProfit,
+            exemptFromMinProfit,
+          });
+          if (!profitable) {
             continue;
           }
           if (
             !bestLiquidation ||
-            totalPricedProfit.gt(bestLiquidation.totalPricedProfit)
+            estimatedNetProfit.gt(bestLiquidation.estimatedNetProfit)
           ) {
+            liquidation.estimatedNetProfit = estimatedNetProfit;
             bestLiquidation = liquidation;
           }
         }
